@@ -1,0 +1,966 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ influencer.full_name }} (@{{ influencer.username }}) - Instagram Influencer Analyzer{% endblock %}
+
+{% block head %}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Instagram Influencer Analyzer - {{username}}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<link rel="stylesheet" href="/static/styles.css">
+
+<!-- Chart.js and plugins -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+
+<style>
+    body {
+        font-family: 'Montserrat', sans-serif;
+        background-color: #f8f9fa;
+    }
+    .container {
+        max-width: 1200px;
+    }
+    .card {
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        overflow: hidden;
+    }
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
+    }
+    .nav-pills .nav-link.active {
+        background-color: #3897f0;
+    }
+    .profile-header {
+        background: linear-gradient(to right, #3897f0, #2a80d2);
+        color: white;
+        padding: 30px 0;
+        margin-bottom: 30px;
+        border-radius: 10px;
+    }
+    .profile-img {
+        width: 150px;
+        height: 150px;
+        object-fit: cover;
+        border: 5px solid white;
+        border-radius: 50%;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    }
+    .stat-card {
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        background: white;
+        transition: all 0.3s ease;
+    }
+    .stat-card:hover {
+        background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ee 100%);
+    }
+    .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #3897f0;
+    }
+    .stat-label {
+        font-size: 14px;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-top: 5px;
+    }
+    .chart-container {
+        position: relative;
+        height: 350px;
+        width: 100%;
+        margin-bottom: 30px;
+    }
+    .post-chart, .weekly-chart, .monthly-chart, .quarterly-chart {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+    .engagement-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 30px;
+    }
+    .engagement-stats .stat-card {
+        text-align: center;
+        padding: 15px;
+        border-left: 4px solid #3897f0;
+    }
+    .engagement-stats .stat-card:nth-child(2) {
+        border-left-color: #FF6384;
+    }
+    .engagement-stats .stat-card:nth-child(3) {
+        border-left-color: #36A2EB;
+    }
+    .engagement-stats .stat-card:nth-child(4) {
+        border-left-color: #4BC0C0;
+    }
+    .tab-content {
+        padding-top: 20px;
+    }
+    .stat-card {
+        transition: transform 0.3s, box-shadow 0.3s;
+        border-radius: 10px;
+        overflow: hidden;
+        background: white;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+    }
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.12);
+    }
+    .chart-container {
+        position: relative;
+        height: 350px;
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        transition: box-shadow 0.3s;
+    }
+    .chart-container:hover {
+        box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+    }
+    .engagement-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 15px;
+        margin-bottom: 25px;
+    }
+    @media (max-width: 992px) {
+        .engagement-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    @media (max-width: 576px) {
+        .engagement-stats {
+            grid-template-columns: 1fr;
+        }
+    }
+    .engagement-stat-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        border-radius: 10px;
+        color: #333;
+        background: white;
+        transition: all 0.3s;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+    }
+    .engagement-stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+    }
+    .engagement-stat-card .stat-icon {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        opacity: 0.7;
+    }
+    .engagement-stat-card .stat-value {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+    .engagement-stat-card .stat-label {
+        font-size: 0.9rem;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .avg-engagement-card {
+        background: linear-gradient(135deg, #f0f8ff, #e6f2ff);
+        border-left: 4px solid #3897f0;
+    }
+    .max-engagement-card {
+        background: linear-gradient(135deg, #fff8f0, #fff2e6);
+        border-left: 4px solid #ff9f40;
+    }
+    .avg-likes-card {
+        background: linear-gradient(135deg, #fff0f3, #ffe6eb);
+        border-left: 4px solid #ff6384;
+    }
+    .avg-comments-card {
+        background: linear-gradient(135deg, #f0fff8, #e6fff2);
+        border-left: 4px solid #8bc34a;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Hidden Username Element for JavaScript -->
+    <span id="username" class="d-none">{{ influencer.username }}</span>
+    
+    <!-- Profile Header -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-2 text-center">
+                    <img src="{{ url_for('static', filename=influencer.profile_pic_local) }}" alt="{{ influencer.full_name }}" class="profile-pic">
+                </div>
+                <div class="col-md-10">
+                    <div class="d-flex align-items-center mb-2">
+                        <h2 class="mb-0 me-2">{{ influencer.full_name }}</h2>
+                        {% if influencer.is_verified %}
+                            <span class="badge bg-primary"><i class="fas fa-check-circle me-1"></i>Verified</span>
+                        {% endif %}
+                    </div>
+                    <h5 class="text-muted mb-3">@{{ influencer.username }}</h5>
+                    
+                    <div class="mb-3">
+                        <span class="badge bg-secondary me-1">{{ influencer.country }}</span>
+                        {% if influencer.business_category %}
+                            <span class="badge bg-success">{{ influencer.business_category }}</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <p>{{ influencer.biography }}</p>
+                    </div>
+                    
+                    <div class="row text-center">
+                        <div class="col-md-3 col-6 mb-3">
+                            <h3>{{ '{:,}'.format(influencer.followers_count) }}</h3>
+                            <p class="text-muted mb-0">Followers</p>
+                        </div>
+                        <div class="col-md-3 col-6 mb-3">
+                            <h3>{{ '{:,}'.format(influencer.follows_count) }}</h3>
+                            <p class="text-muted mb-0">Following</p>
+                        </div>
+                        <div class="col-md-3 col-6 mb-3">
+                            <h3>{{ '{:,}'.format(influencer.posts_count) }}</h3>
+                            <p class="text-muted mb-0">Posts</p>
+                        </div>
+                        <div class="col-md-3 col-6 mb-3">
+                            <h3>{{ '%.2f'|format(influencer.get('avg_engagement_rate', 0)) }}%</h3>
+                            <p class="text-muted mb-0">Avg. Engagement</p>
+                        </div>
+                    </div>
+                    
+                    {% if influencer.get('external_url') %}
+                        <div class="mt-3">
+                            <a href="{{ influencer.external_url }}" target="_blank" class="btn btn-outline-secondary">
+                                <i class="fas fa-external-link-alt me-2"></i>{{ influencer.external_url }}
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Content Analysis -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-star me-2"></i>Interests & Topics</h5>
+                </div>
+                <div class="card-body">
+                    {% if influencer.get('main_interests') %}
+                        <h6 class="card-subtitle mb-2">Main Interests:</h6>
+                        <div class="mb-3">
+                            {% for interest in influencer.main_interests %}
+                                <span class="interest-tag">{{ interest }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    
+                    {% if influencer.get('related_interests') %}
+                        <h6 class="card-subtitle mb-2">Related Interests:</h6>
+                        <div class="mb-3">
+                            {% for interest in influencer.related_interests %}
+                                <span class="interest-tag">{{ interest }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    
+                    {% if influencer.get('key_topics') %}
+                        <h6 class="card-subtitle mb-2">Key Topics:</h6>
+                        <div class="mb-3">
+                            {% for topic in influencer.key_topics %}
+                                <span class="interest-tag">{{ topic }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-handshake me-2"></i>Brand Affiliations</h5>
+                </div>
+                <div class="card-body">
+                    {% if influencer.get('affiliated_brands') and influencer.affiliated_brands|length > 0 %}
+                        <div class="mb-3">
+                            {% for brand in influencer.affiliated_brands %}
+                                <div class="d-inline-block interest-tag">{{ brand }}</div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="card-text text-muted">No clear brand affiliations detected.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Engagement Data Section -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <h2 class="section-title">Engagement Analytics</h2>
+            
+            <!-- Engagement Statistics -->
+            <div class="engagement-stats">
+                <div class="engagement-stat-card avg-engagement-card">
+                    <div class="stat-icon"><i class="fas fa-percentage"></i></div>
+                    <div class="stat-value" id="avgEngagement">-</div>
+                    <div class="stat-label">Avg. Engagement Rate</div>
+                </div>
+                <div class="engagement-stat-card max-engagement-card">
+                    <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+                    <div class="stat-value" id="maxEngagement">-</div>
+                    <div class="stat-label">Max Engagement Rate</div>
+                </div>
+                <div class="engagement-stat-card avg-likes-card">
+                    <div class="stat-icon"><i class="fas fa-heart"></i></div>
+                    <div class="stat-value" id="avgLikes">-</div>
+                    <div class="stat-label">Avg. Likes</div>
+                </div>
+                <div class="engagement-stat-card avg-comments-card">
+                    <div class="stat-icon"><i class="fas fa-comment"></i></div>
+                    <div class="stat-value" id="avgComments">-</div>
+                    <div class="stat-label">Avg. Comments</div>
+                </div>
+            </div>
+            
+            <!-- Post Engagement Chart -->
+            <div class="chart-container post-chart">
+                <canvas id="postEngagementChart"></canvas>
+                <div id="postEngagementMessage" class="text-center py-5 d-none">
+                    <i class="fas fa-chart-line fa-3x mb-3 text-muted"></i>
+                    <p class="lead">No post engagement data available</p>
+                </div>
+            </div>
+            
+            <!-- Weekly Engagement Chart -->
+            <div class="chart-container weekly-chart">
+                <canvas id="weeklyEngagementChart"></canvas>
+                <div id="weeklyEngagementMessage" class="text-center py-5 d-none">
+                    <i class="fas fa-calendar-week fa-3x mb-3 text-muted"></i>
+                    <p class="lead">No weekly engagement data available</p>
+                </div>
+            </div>
+            
+            <!-- Monthly Engagement Chart -->
+            <div class="chart-container monthly-chart">
+                <canvas id="monthlyEngagementChart"></canvas>
+                <div id="monthlyEngagementMessage" class="text-center py-5 d-none">
+                    <i class="fas fa-calendar-alt fa-3x mb-3 text-muted"></i>
+                    <p class="lead">No monthly engagement data available</p>
+                </div>
+            </div>
+            
+            <!-- Quarterly Engagement Chart -->
+            <div class="chart-container quarterly-chart">
+                <canvas id="quarterlyEngagementChart"></canvas>
+                <div id="quarterlyEngagementMessage" class="text-center py-5 d-none">
+                    <i class="fas fa-chart-bar fa-3x mb-3 text-muted"></i>
+                    <p class="lead">No quarterly engagement data available</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Hashtags Analysis -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0"><i class="fas fa-hashtag me-2"></i>Top Hashtags</h5>
+                </div>
+                <div class="card-body">
+                    {% if influencer.get('top_hashtags') and influencer.top_hashtags.items()|length > 0 %}
+                        <div class="mb-3">
+                            {% for hashtag, count in influencer.top_hashtags.items() %}
+                                <div class="interest-tag">#{{ hashtag }} ({{ count }})</div>
+                            {% endfor %}
+                        </div>
+                        
+                        {% if influencer.hashtags_wordcloud %}
+                            <div class="wordcloud-container text-center">
+                                <img src="{{ influencer.hashtags_wordcloud }}" alt="Hashtags Word Cloud" class="img-fluid">
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <p class="card-text text-muted">No hashtags found in the analyzed posts.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="fas fa-at me-2"></i>Top Mentions</h5>
+                </div>
+                <div class="card-body">
+                    {% if influencer.get('top_mentions') and influencer.top_mentions.items()|length > 0 %}
+                        <div class="mb-3">
+                            {% for mention, count in influencer.top_mentions.items() %}
+                                <div class="interest-tag">@{{ mention }} ({{ count }})</div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="card-text text-muted">No mentions found in the analyzed posts.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sample Posts -->
+    {% if influencer.get('posts') and influencer.posts|length > 0 %}
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="fas fa-images me-2"></i>Sample Posts</h5>
+            </div>
+            <div class="card-body">
+                <div class="scroll-cards">
+                    {% for post in influencer.posts %}
+                        <div class="card">
+                            {% if post.display_url_local %}
+                                <img src="{{ url_for('static', filename=post.display_url_local) }}" class="card-img-top" alt="Instagram Post">
+                            {% else %}
+                                <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 300px;">
+                                    <i class="fas fa-image fa-3x text-muted"></i>
+                                </div>
+                            {% endif %}
+                            <div class="card-body">
+                                <p class="card-text small">{{ post.caption|truncate(100) }}</p>
+                                <div class="d-flex justify-content-between">
+                                    <div class="engagement-metric">
+                                        <i class="fas fa-heart text-danger"></i> {{ '{:,}'.format(post.likes_count) }}
+                                    </div>
+                                    <div class="engagement-metric">
+                                        <i class="fas fa-comment text-primary"></i> {{ '{:,}'.format(post.comments_count) }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    
+    <div class="text-center mb-4">
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get the username from the page
+        const username = document.getElementById('username').textContent;
+        
+        // Chart.js default configuration
+        Chart.defaults.font.family = "'Montserrat', 'Helvetica', 'Arial', sans-serif";
+        Chart.defaults.color = '#666';
+        Chart.defaults.responsive = true;
+        
+        // Define a color palette for consistent styling
+        const chartColors = {
+            primary: 'rgba(56, 151, 240, 1)',      // Instagram Blue
+            secondary: 'rgba(225, 48, 108, 1)',    // Instagram Pink
+            tertiary: 'rgba(255, 193, 7, 1)',      // Instagram Yellow
+            quaternary: 'rgba(76, 175, 80, 1)',    // Green
+            light: 'rgba(248, 249, 250, 1)',
+            dark: 'rgba(52, 58, 64, 1)'
+        };
+        
+        // Fetch engagement data
+        fetch(`/api/influencer/${username}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Check if there's an error field in the response
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Process and sanitize data
+                function sanitizeData(dates, rates, likes, comments) {
+                    if (!dates || !rates || !likes || !comments) return null;
+                    if (dates.length === 0 || rates.length === 0) return null;
+                    
+                    // Create a filtered dataset with valid values only
+                    const validData = [];
+                    for (let i = 0; i < dates.length; i++) {
+                        // Skip entries with invalid dates or rates
+                        if (!dates[i] || isNaN(new Date(dates[i]).getTime()) || 
+                            rates[i] === null || rates[i] === undefined || isNaN(rates[i])) continue;
+                        
+                        validData.push({
+                            date: dates[i],
+                            rate: parseFloat(rates[i]),
+                            likes: likes[i] || 0,
+                            comments: comments[i] || 0
+                        });
+                    }
+                    
+                    // Sort by date
+                    validData.sort((a, b) => new Date(a.date) - new Date(b.date));
+                    
+                    // Return as separate arrays
+                    return {
+                        dates: validData.map(d => d.date),
+                        rates: validData.map(d => d.rate),
+                        likes: validData.map(d => d.likes),
+                        comments: validData.map(d => d.comments)
+                    };
+                }
+                
+                // Calculate stats for display
+                const engagementRates = Array.isArray(data.post_engagement.engagement_rate) ? data.post_engagement.engagement_rate : [];
+                const validRates = engagementRates.filter(rate => !isNaN(parseFloat(rate)) && rate !== null);
+                
+                // Use Number() to ensure we're working with numeric values
+                const maxEngagement = validRates.length > 0 ? 
+                    Math.max(...validRates.map(rate => Number(rate))) : 0;
+                    
+                const avgEngagement = validRates.length > 0 ? 
+                    validRates.reduce((a, b) => Number(a) + Number(b), 0) / validRates.length : 0;
+                    
+                const avgLikes = Array.isArray(data.post_engagement.likes) && data.post_engagement.likes.length > 0 ? 
+                    data.post_engagement.likes.filter(like => !isNaN(parseFloat(like))).reduce((a, b) => Number(a) + Number(b), 0) / 
+                    data.post_engagement.likes.filter(like => !isNaN(parseFloat(like))).length : 0;
+                    
+                const avgComments = Array.isArray(data.post_engagement.comments) && data.post_engagement.comments.length > 0 ? 
+                    data.post_engagement.comments.filter(comment => !isNaN(parseFloat(comment))).reduce((a, b) => Number(a) + Number(b), 0) / 
+                    data.post_engagement.comments.filter(comment => !isNaN(parseFloat(comment))).length : 0;
+                
+                // Ensure all values are valid numbers before calling toFixed()
+                document.getElementById('avgEngagement').textContent = (isNaN(avgEngagement) ? 0 : avgEngagement).toFixed(2) + '%';
+                document.getElementById('maxEngagement').textContent = (isNaN(maxEngagement) ? 0 : maxEngagement).toFixed(2) + '%';
+                document.getElementById('avgLikes').textContent = Math.round(isNaN(avgLikes) ? 0 : avgLikes).toLocaleString();
+                document.getElementById('avgComments').textContent = Math.round(isNaN(avgComments) ? 0 : avgComments).toLocaleString();
+
+                // Create the Post Engagement Chart
+                const postData = sanitizeData(
+                    data.post_engagement.dates, 
+                    data.post_engagement.engagement_rate,
+                    data.post_engagement.likes,
+                    data.post_engagement.comments
+                );
+                
+                if (postData && postData.dates.length > 0) {
+                    createEngagementChart('postEngagementChart', 'Post-wise Engagement', postData, 'line', chartColors);
+                } else {
+                    document.getElementById('postEngagementMessage').classList.remove('d-none');
+                    document.querySelector('.post-chart canvas').classList.add('d-none');
+                }
+                
+                // Create the Weekly Engagement Chart
+                const weeklyData = sanitizeData(
+                    data.weekly_engagement.dates, 
+                    data.weekly_engagement.engagement_rate,
+                    data.weekly_engagement.likes,
+                    data.weekly_engagement.comments
+                );
+                
+                if (weeklyData && weeklyData.dates.length > 0) {
+                    createEngagementChart('weeklyEngagementChart', 'Weekly Engagement', weeklyData, 'bar', chartColors);
+                } else {
+                    document.getElementById('weeklyEngagementMessage').classList.remove('d-none');
+                    document.querySelector('.weekly-chart canvas').classList.add('d-none');
+                }
+                
+                // Create the Monthly Engagement Chart
+                const monthlyData = sanitizeData(
+                    data.monthly_engagement.dates, 
+                    data.monthly_engagement.engagement_rate,
+                    data.monthly_engagement.likes,
+                    data.monthly_engagement.comments
+                );
+                
+                if (monthlyData && monthlyData.dates.length > 0) {
+                    createEngagementChart('monthlyEngagementChart', 'Monthly Engagement', monthlyData, 'bar', chartColors);
+                } else {
+                    document.getElementById('monthlyEngagementMessage').classList.remove('d-none');
+                    document.querySelector('.monthly-chart canvas').classList.add('d-none');
+                }
+                
+                // Create the Quarterly Engagement Chart
+                const quarterlyData = sanitizeData(
+                    data.quarterly_engagement.dates, 
+                    data.quarterly_engagement.engagement_rate,
+                    data.quarterly_engagement.likes,
+                    data.quarterly_engagement.comments
+                );
+                
+                if (quarterlyData && quarterlyData.dates.length > 0) {
+                    createEngagementChart('quarterlyEngagementChart', 'Quarterly Engagement', quarterlyData, 'bar', chartColors);
+                } else {
+                    document.getElementById('quarterlyEngagementMessage').classList.remove('d-none');
+                    document.querySelector('.quarterly-chart canvas').classList.add('d-none');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching engagement data:', error);
+                // Display error message
+                document.querySelectorAll('.chart-container canvas').forEach(canvas => {
+                    canvas.classList.add('d-none');
+                });
+                document.querySelectorAll('.chart-container div[id$="Message"]').forEach(message => {
+                    message.classList.remove('d-none');
+                    message.innerHTML = `
+                        <i class="fas fa-exclamation-triangle fa-3x mb-3 text-warning"></i>
+                        <p class="lead">Error loading engagement data: ${error.message || 'Unknown error'}</p>
+                    `;
+                });
+            });
+            
+        // Function to create an engagement chart
+        function createEngagementChart(canvasId, title, data, chartType = 'line', colors) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+
+            // Format dates using moment.js
+            const formattedDates = data.dates.map(date => moment(date).format('MMM D, YYYY'));
+            
+            // Create gradients
+            let primaryGradient = ctx.createLinearGradient(0, 0, 0, 400);
+            primaryGradient.addColorStop(0, colors.primary);
+            primaryGradient.addColorStop(1, 'rgba(56, 151, 240, 0.1)');
+            
+            let secondaryGradient = ctx.createLinearGradient(0, 0, 0, 400);
+            secondaryGradient.addColorStop(0, colors.secondary);
+            secondaryGradient.addColorStop(1, 'rgba(225, 48, 108, 0.1)');
+            
+            // Determine chart colors based on chart type
+            let fillColor, borderColor, likesColor, commentsColor;
+            
+            if (chartType === 'line') {
+                fillColor = primaryGradient;
+                borderColor = colors.primary;
+                likesColor = 'rgba(225, 48, 108, 0.7)';
+                commentsColor = 'rgba(76, 175, 80, 0.7)';
+            } else {
+                fillColor = 'rgba(56, 151, 240, 0.7)';
+                borderColor = 'rgba(56, 151, 240, 1)';
+                likesColor = 'rgba(225, 48, 108, 0.7)';
+                commentsColor = 'rgba(76, 175, 80, 0.7)';
+            }
+            
+            // Ensure avgEngagement is a valid number for the annotation
+            const safeAvgEngagement = isNaN(avgEngagement) ? 0 : avgEngagement;
+            
+            // Create chart configuration based on type
+            let chartConfig = {
+                type: chartType,
+                data: {
+                    labels: formattedDates,
+                    datasets: [
+                        {
+                            label: 'Engagement Rate (%)',
+                            data: data.rates,
+                            backgroundColor: fillColor,
+                            borderColor: borderColor,
+                            borderWidth: 3,
+                            pointBackgroundColor: '#fff',
+                            pointBorderColor: borderColor,
+                            pointBorderWidth: 2,
+                            pointRadius: chartType === 'line' ? 4 : 0,
+                            pointHoverRadius: 7,
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: colors.secondary,
+                            pointHoverBorderWidth: 3,
+                            tension: 0.4,
+                            yAxisID: 'y',
+                            order: 1,
+                            fill: chartType === 'line'
+                        },
+                        {
+                            label: 'Likes',
+                            data: data.likes,
+                            backgroundColor: likesColor,
+                            borderColor: colors.secondary,
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            pointHoverRadius: 0,
+                            yAxisID: 'y1',
+                            type: 'bar',
+                            order: 3,
+                            hidden: chartType === 'line'
+                        },
+                        {
+                            label: 'Comments',
+                            data: data.comments,
+                            backgroundColor: commentsColor,
+                            borderColor: colors.quaternary,
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            pointHoverRadius: 0,
+                            yAxisID: 'y1',
+                            type: 'bar',
+                            order: 2,
+                            hidden: chartType === 'line'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: title,
+                            font: {
+                                size: 18,
+                                weight: 'bold'
+                            },
+                            padding: {
+                                top: 10,
+                                bottom: 20
+                            },
+                            color: colors.dark
+                        },
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 15,
+                                font: {
+                                    size: 12
+                                },
+                                color: colors.dark
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleFont: {
+                                size: 14
+                            },
+                            titleColor: '#fff',
+                            bodyFont: {
+                                size: 13
+                            },
+                            bodyColor: '#fff',
+                            padding: 12,
+                            cornerRadius: 6,
+                            displayColors: true,
+                            boxPadding: 5,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.dataset.yAxisID === 'y') {
+                                        label += context.parsed.y.toFixed(2) + '%';
+                                    } else {
+                                        label += context.parsed.y.toLocaleString();
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
+                        annotation: {
+                            annotations: {
+                                line1: {
+                                    type: 'line',
+                                    yMin: safeAvgEngagement,
+                                    yMax: safeAvgEngagement,
+                                    borderColor: colors.secondary,
+                                    borderWidth: 2,
+                                    borderDash: [6, 6],
+                                    label: {
+                                        display: true,
+                                        content: `Avg: ${safeAvgEngagement.toFixed(2)}%`,
+                                        position: 'end',
+                                        backgroundColor: 'rgba(225, 48, 108, 0.8)',
+                                        font: {
+                                            size: 11,
+                                            weight: 'bold'
+                                        },
+                                        padding: {
+                                            top: 4,
+                                            bottom: 4,
+                                            left: 8,
+                                            right: 8
+                                        },
+                                        borderRadius: 4
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)',
+                                display: true
+                            },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                font: {
+                                    size: 10
+                                },
+                                color: colors.dark
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            min: 0,
+                            suggestedMax: Math.max(...data.rates) * 1.2, // Add some space above max value
+                            title: {
+                                display: true,
+                                text: 'Engagement Rate (%)',
+                                font: {
+                                    weight: 'bold',
+                                    size: 12
+                                },
+                                color: colors.primary
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            },
+                            ticks: {
+                                font: {
+                                    size: 11
+                                },
+                                color: colors.primary,
+                                callback: function(value) {
+                                    return value.toFixed(1) + '%';
+                                }
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            min: 0,
+                            suggestedMax: Math.max(...data.likes) * 1.2, // Add some space above max value
+                            title: {
+                                display: true,
+                                text: 'Likes & Comments',
+                                font: {
+                                    weight: 'bold',
+                                    size: 12
+                                },
+                                color: colors.secondary
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 11
+                                },
+                                color: colors.secondary
+                            }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    animation: {
+                        duration: 1500,
+                        easing: 'easeOutQuart',
+                        delay: function(context) {
+                            // Create a staggered animation effect
+                            return context.dataIndex * 50;
+                        }
+                    },
+                    transitions: {
+                        active: {
+                            animation: {
+                                duration: 400
+                            }
+                        }
+                    }
+                }
+            };
+            
+            // Create the chart
+            const chart = new Chart(ctx, chartConfig);
+            
+            // Add toggle buttons for all charts
+            const container = canvas.closest('.chart-container');
+            const buttonContainer = document.createElement('div');
+            buttonContainer.className = 'chart-controls mt-3 text-center';
+            buttonContainer.innerHTML = `
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-primary active" data-metric="engagement">
+                        <i class="fas fa-percentage me-1"></i> Engagement Rate
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" data-metric="interactions">
+                        <i class="fas fa-heart me-1"></i> Likes & Comments
+                    </button>
+                    <button type="button" class="btn btn-outline-success" data-metric="all">
+                        <i class="fas fa-chart-bar me-1"></i> Show All
+                    </button>
+                </div>
+            `;
+            container.appendChild(buttonContainer);
+            
+            // Add event listeners for the buttons
+            buttonContainer.querySelectorAll('button').forEach(button => {
+                button.addEventListener('click', function() {
+                    // Update active state
+                    buttonContainer.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Update chart display
+                    if (this.dataset.metric === 'engagement') {
+                        chart.data.datasets[0].hidden = false;
+                        chart.data.datasets[1].hidden = true;
+                        chart.data.datasets[2].hidden = true;
+                    } else if (this.dataset.metric === 'interactions') {
+                        chart.data.datasets[0].hidden = true;
+                        chart.data.datasets[1].hidden = false;
+                        chart.data.datasets[2].hidden = false;
+                    } else { // all
+                        chart.data.datasets[0].hidden = false;
+                        chart.data.datasets[1].hidden = false;
+                        chart.data.datasets[2].hidden = false;
+                    }
+                    chart.update();
+                });
+            });
+            
+            return chart;
+        }
+    });
+</script>
+{% endblock %} 

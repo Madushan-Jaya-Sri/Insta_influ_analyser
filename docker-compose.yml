@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  web:
+    image: ${DOCKER_IMAGE_TAG:-ghcr.io/your-username/insta-influencer-analyzer:latest}
+    container_name: insta-analyzer-app
+    restart: always
+    expose:
+      - "5000"
+    volumes:
+      - app_data:/app/app/data
+      - app_uploads:/app/app/uploads
+      - app_images:/app/app/static/images
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 1m
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app_network
+
+  redis:
+    image: redis:alpine
+    container_name: insta-analyzer-redis
+    restart: always
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+
+  nginx:
+    image: nginx:alpine
+    container_name: insta-analyzer-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+      - app_images:/usr/share/nginx/html/static/images:ro
+      - certbot_data:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+    depends_on:
+      - web
+    networks:
+      - app_network
+
+  certbot:
+    image: certbot/certbot
+    container_name: insta-analyzer-certbot
+    volumes:
+      - certbot_data:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    command: renew
+    depends_on:
+      - nginx
+
+volumes:
+  app_data:
+  app_uploads:
+  app_images:
+  redis_data:
+  certbot_data:
+  certbot_certs:
+
+networks:
+  app_network:
+    driver: bridge 

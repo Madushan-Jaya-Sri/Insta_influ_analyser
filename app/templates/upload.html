@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+
+{% block title %}Upload Instagram Data - Influencer Analyzer{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="hero-section text-center mb-5">
+        <h1><i class="fab fa-instagram me-2"></i>Upload Instagram Data</h1>
+        <p class="lead">Upload your data files to begin analyzing influencer profiles</p>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card upload-form">
+                <div class="card-header bg-gradient text-white">
+                    <h4 class="mb-0">Upload Instagram Data Files</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-center mb-4">Please upload both JSON files from your Instagram data download to begin analysis.</p>
+                    
+                    {% if error %}
+                        <div class="alert alert-danger">{{ error }}</div>
+                    {% endif %}
+                    
+                    <form method="POST" enctype="multipart/form-data">
+                        {{ form.csrf_token }}
+                        
+                        <div class="mb-4">
+                            <h5 class="text-primary"><i class="fas fa-info-circle me-2"></i>How to Get Your Instagram Data</h5>
+                            <ol class="instruction-list">
+                                <li>Download your Instagram influencer data in JSON format</li>
+                                <li>Make sure you have both the profile and posts JSON files</li>
+                                <li>If using Instagram's data export, look for files in the JSON folder</li>
+                                <li>Upload both files below to begin the analysis process</li>
+                            </ol>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="{{ form.profile_file.id }}" class="form-label">
+                                <i class="fas fa-user-circle me-2"></i>Profile JSON File
+                            </label>
+                            {{ form.profile_file(class="form-control") }}
+                            {% if form.profile_file.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.profile_file.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">Upload the Instagram profile JSON file containing influencer data</div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="{{ form.posts_file.id }}" class="form-label">
+                                <i class="fas fa-images me-2"></i>Posts JSON File
+                            </label>
+                            {{ form.posts_file(class="form-control") }}
+                            {% if form.posts_file.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.posts_file.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">Upload the Instagram posts JSON file containing post data</div>
+                        </div>
+                        
+                        <div class="text-center mt-4">
+                            {{ form.submit(class="btn btn-primary btn-lg px-4") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h5 class="text-primary"><i class="fas fa-chart-line me-2"></i>What Happens Next?</h5>
+                    <div class="process-steps">
+                        <div class="process-step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <h6>Country Selection</h6>
+                                <p>You'll specify the country for each influencer</p>
+                            </div>
+                        </div>
+                        <div class="process-step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <h6>Data Processing</h6>
+                                <p>Our system will analyze the data with AI</p>
+                            </div>
+                        </div>
+                        <div class="process-step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <h6>Dashboard Access</h6>
+                                <p>View comprehensive insights about your influencers</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hero-section {
+        padding: 3rem 0 1.5rem;
+    }
+    
+    .hero-section h1 {
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 1rem;
+    }
+    
+    .upload-form {
+        border: none;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    
+    .card-header.bg-gradient {
+        background: linear-gradient(45deg, #405de6, #5851db, #833ab4, #c13584, #e1306c, #fd1d1d);
+    }
+    
+    .instruction-list {
+        background-color: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin-top: 1rem;
+    }
+    
+    .instruction-list li {
+        margin-bottom: 0.5rem;
+    }
+    
+    .form-label {
+        font-weight: 600;
+    }
+    
+    .process-steps {
+        padding: 1rem 0;
+    }
+    
+    .process-step {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    
+    .step-number {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(45deg, #833ab4, #fd1d1d);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        margin-right: 1rem;
+    }
+    
+    .step-content h6 {
+        margin-bottom: 0.25rem;
+        font-weight: 600;
+    }
+    
+    .step-content p {
+        margin-bottom: 0;
+        color: #666;
+    }
+</style>
+{% endblock %} 

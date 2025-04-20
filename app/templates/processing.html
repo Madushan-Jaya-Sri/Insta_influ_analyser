@@ -1,0 +1,366 @@
+{% extends 'base.html' %}
+
+{% block title %}Processing Instagram Data - Instagram Influencer Analyzer{% endblock %}
+
+{% block head %}
+<style>
+    .processing-container {
+        max-width: 650px;
+        margin: 3rem auto;
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        background-color: #fff;
+        text-align: center;
+    }
+    
+    .instagram-gradient {
+        background: linear-gradient(45deg, #405de6, #5851db, #833ab4, #c13584, #e1306c, #fd1d1d);
+        background-size: 300% 300%;
+        animation: gradient 5s ease infinite;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        font-weight: 600;
+    }
+    
+    @keyframes gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    
+    .steps-container {
+        margin-top: 2rem;
+        position: relative;
+    }
+    
+    .progress-bar {
+        position: absolute;
+        top: 17px;
+        left: 0;
+        height: 6px;
+        background: #f0f0f0;
+        width: 100%;
+        z-index: 1;
+    }
+    
+    .progress-complete {
+        position: absolute;
+        top: 17px;
+        left: 0;
+        height: 6px;
+        background: linear-gradient(to right, #833ab4, #fd1d1d, #fcb045);
+        width: 0%;
+        z-index: 2;
+        transition: width 0.3s ease;
+    }
+    
+    .processing-steps {
+        display: flex;
+        justify-content: space-between;
+        position: relative;
+        z-index: 3;
+    }
+    
+    .step-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 25%;
+    }
+    
+    .step-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 10px;
+        position: relative;
+        z-index: 3;
+        transition: all 0.3s ease;
+    }
+    
+    .step-icon i {
+        color: #999;
+        transition: all 0.3s ease;
+    }
+    
+    .step-text {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #777;
+        transition: all 0.3s ease;
+        max-width: 100px;
+        margin: 0 auto;
+    }
+    
+    .step-item.active .step-icon {
+        background: linear-gradient(45deg, #405de6, #5851db, #833ab4);
+        transform: scale(1.1);
+        box-shadow: 0 3px 10px rgba(131, 58, 180, 0.3);
+    }
+    
+    .step-item.active .step-icon i {
+        color: white;
+    }
+    
+    .step-item.active .step-text {
+        color: #333;
+        font-weight: 600;
+    }
+    
+    .step-item.completed .step-icon {
+        background: linear-gradient(45deg, #833ab4, #fd1d1d);
+        transform: scale(1);
+    }
+    
+    .step-item.completed .step-icon i {
+        color: white;
+    }
+    
+    .step-detail {
+        margin-top: 2.5rem;
+        padding: 1rem;
+        border-radius: 8px;
+        background-color: #f8f9fa;
+        min-height: 100px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .step-detail p {
+        margin-bottom: 0.5rem;
+    }
+    
+    .detail-status {
+        display: flex;
+        align-items: center;
+        margin-bottom: 5px;
+        font-size: 0.9rem;
+    }
+    
+    .detail-status i {
+        margin-right: 8px;
+        font-size: 0.8rem;
+    }
+    
+    .status-complete i {
+        color: #28a745;
+    }
+    
+    .status-pending i {
+        color: #ffc107;
+    }
+    
+    .status-working i {
+        color: #17a2b8;
+        animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.3; }
+        100% { opacity: 1; }
+    }
+    
+    #processingMessage {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-top: 1rem;
+        color: #555;
+    }
+    
+    .step-item.processing .step-icon {
+        animation: pulse-bg 1.5s infinite;
+    }
+    
+    @keyframes pulse-bg {
+        0% { box-shadow: 0 0 0 0 rgba(131, 58, 180, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(131, 58, 180, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(131, 58, 180, 0); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="processing-container">
+        <h1>Processing Your <span class="instagram-gradient">Instagram Data</span></h1>
+        <p class="text-muted">Please wait while we analyze the uploaded content</p>
+        
+        <div class="steps-container">
+            <div class="progress-bar"></div>
+            <div class="progress-complete" id="progressBar"></div>
+            
+            <div class="processing-steps">
+                <div class="step-item" id="step1">
+                    <div class="step-icon">
+                        <i class="fas fa-globe"></i>
+                    </div>
+                    <div class="step-text">URL Fetching</div>
+                </div>
+                
+                <div class="step-item" id="step2">
+                    <div class="step-icon">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <div class="step-text">Data Processing</div>
+                </div>
+                
+                <div class="step-item" id="step3">
+                    <div class="step-icon">
+                        <i class="fas fa-images"></i>
+                    </div>
+                    <div class="step-text">Image Processing</div>
+                </div>
+                
+                <div class="step-item" id="step4">
+                    <div class="step-icon">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <div class="step-text">Content Analysis</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="stepDetail" class="step-detail">
+            <p id="processingMessage">Initializing data processing...</p>
+            <div id="detailStatus" class="detail-status-container">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Simulated processing steps with real-time updates
+        const progressBar = document.getElementById('progressBar');
+        const processingMessage = document.getElementById('processingMessage');
+        const detailStatus = document.getElementById('detailStatus');
+        
+        // Statuses for each step
+        const steps = [
+            { id: 'step1', message: 'Fetching Instagram profiles from URLs...', details: [
+                { id: 'urls', text: 'Retrieving data from Instagram URLs', status: 'working' },
+                { id: 'profiles', text: 'Extracting profile information', status: 'pending' }
+            ]},
+            { id: 'step2', message: 'Processing profile and post data...', details: [
+                { id: 'data', text: 'Organizing profile data', status: 'pending' },
+                { id: 'images', text: 'Downloading images', status: 'pending' }
+            ]},
+            { id: 'step3', message: 'Analyzing content with AI...', details: [
+                { id: 'content', text: 'Analyzing post content', status: 'pending' },
+                { id: 'sentiment', text: 'Determining key themes', status: 'pending' }
+            ]},
+            { id: 'step4', message: 'Calculating engagement metrics...', details: [
+                { id: 'engagement', text: 'Computing engagement rates', status: 'pending' },
+                { id: 'final', text: 'Preparing dashboard data', status: 'pending' }
+            ]}
+        ];
+        
+        // Connect to Server-Sent Events endpoint
+        const eventSource = new EventSource("{{ url_for('main.progress_stream') }}");
+        
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            updateProgress(data);
+        };
+        
+        eventSource.onerror = function() {
+            // Handle connection errors
+            eventSource.close();
+        };
+        
+        function updateProgress(data) {
+            // Update the progress based on the data from the server
+            const { step, progress, status, message, complete } = data;
+            
+            // Update progress bar
+            progressBar.style.width = `${progress}%`;
+            
+            // Update step statuses
+            updateSteps(step);
+            
+            // Update message
+            if (message) {
+                processingMessage.textContent = message;
+            }
+            
+            // Update detail status items
+            updateDetailStatus(step, status);
+            
+            // If processing is complete, redirect to dashboard
+            if (complete) {
+                eventSource.close();
+                setTimeout(() => {
+                    window.location.href = "{{ url_for('main.dashboard') }}";
+                }, 1000);
+            }
+        }
+        
+        function updateSteps(currentStep) {
+            // Reset all steps
+            for (let i = 1; i <= 4; i++) {
+                const stepEl = document.getElementById(`step${i}`);
+                stepEl.classList.remove('active', 'completed', 'processing');
+                
+                if (i < currentStep) {
+                    stepEl.classList.add('completed');
+                } else if (i === currentStep) {
+                    stepEl.classList.add('active', 'processing');
+                }
+            }
+        }
+        
+        function updateDetailStatus(step, statusData) {
+            // Clear previous details
+            detailStatus.innerHTML = '';
+            
+            // Select the appropriate detail items based on current step
+            let details = steps.find(s => s.id === `step${step}`)?.details || [];
+            
+            // Create and append status items
+            details.forEach(detail => {
+                const status = statusData && statusData[detail.id] ? statusData[detail.id] : 'pending';
+                const statusClass = getStatusClass(status);
+                const statusIcon = getStatusIcon(status);
+                
+                const statusElement = document.createElement('div');
+                statusElement.className = `detail-status ${statusClass}`;
+                statusElement.innerHTML = `<i class="${statusIcon}"></i> ${detail.text}`;
+                
+                detailStatus.appendChild(statusElement);
+            });
+        }
+        
+        function getStatusClass(status) {
+            switch(status) {
+                case 'complete': return 'status-complete';
+                case 'working': return 'status-working';
+                default: return 'status-pending';
+            }
+        }
+        
+        function getStatusIcon(status) {
+            switch(status) {
+                case 'complete': return 'fas fa-check-circle';
+                case 'working': return 'fas fa-spinner fa-spin';
+                default: return 'far fa-circle';
+            }
+        }
+        
+        // Initialize with first step
+        updateSteps(1);
+        updateDetailStatus(1, { urls: 'working', profiles: 'pending' });
+    });
+</script>
+{% endblock %} 

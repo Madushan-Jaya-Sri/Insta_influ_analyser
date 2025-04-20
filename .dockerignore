@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+.github
+
+# Environment
+.env
+venv/
+env/
+.venv/
+.env.example
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+*.md
+!README.md
+
+# Data files
+app/data/*
+app/uploads/*
+app/static/images/profiles/*
+app/static/images/posts/*
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test files
+tests/
+
+# Logs
+*.log
+
+# Local SSL certificates
+nginx/ssl/*
+
+# Temporary files
+.DS_Store
+Thumbs.db 

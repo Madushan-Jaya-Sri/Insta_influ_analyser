@@ -1,0 +1,192 @@
+{% extends 'base.html' %}
+
+{% block title %}Select Countries - Instagram Influencer Analyzer{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="hero-section text-center mb-5">
+        <h1><i class="fas fa-globe-americas me-2"></i>Select Countries</h1>
+        <p class="lead">Specify the country for each influencer to enhance analysis</p>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card countries-form">
+                <div class="card-header bg-gradient text-white">
+                    <h4 class="mb-0">Specify Influencer Countries</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-center mb-4">Select the primary country for each influencer to improve regional analysis accuracy.</p>
+                    
+                    {% if error %}
+                        <div class="alert alert-danger">{{ error }}</div>
+                    {% endif %}
+                    
+                    {% if usernames %}
+                        <form method="POST">
+                            {{ form.csrf_token }}
+                            
+                            <div class="influencer-list">
+                                {% for username in usernames %}
+                                    <div class="influencer-item mb-4">
+                                        <div class="influencer-header">
+                                            <i class="fab fa-instagram"></i>
+                                            <span class="username">@{{ username }}</span>
+                                        </div>
+                                        
+                                        <div class="country-select mt-2">
+                                            {% set field_name = 'country_' + username %}
+                                            <!-- Access field from form class using array syntax -->
+                                            <select name="{{ field_name }}" class="form-select" required>
+                                                <option value="">Select Country</option>
+                                                <option value="Australia">Australia</option>
+                                                <option value="Canada">Canada</option>
+                                                <option value="India">India</option>
+                                                <option value="Malaysia">Malaysia</option>
+                                                <option value="Singapore">Singapore</option>
+                                                <option value="Sri Lanka">Sri Lanka</option>
+                                                <option value="United Kingdom">United Kingdom</option>
+                                                <option value="United States">United States</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                            
+                                            {% if form.errors and field_name in form.errors %}
+                                                <div class="text-danger mt-1">
+                                                    {% for error in form[field_name].errors %}
+                                                        {{ error }}
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="text-center mt-4">
+                                <button type="submit" id="submit-btn" class="btn btn-primary btn-lg px-4">
+                                    <i class="fas fa-cog me-2"></i>Process Data
+                                </button>
+                            </div>
+                        </form>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            No influencer profiles found in the uploaded data. Please ensure you uploaded the correct files.
+                        </div>
+                        <div class="text-center mt-3">
+                            <a href="{{ url_for('main.upload_files') }}" class="btn btn-primary">
+                                <i class="fas fa-arrow-left me-2"></i>Back to Upload
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h5 class="text-primary"><i class="fas fa-info-circle me-2"></i>Why Country Matters</h5>
+                    <p>Specifying the correct country for each influencer helps our system:</p>
+                    <ul class="benefits-list">
+                        <li>Analyze regional engagement patterns</li>
+                        <li>Compare performance against local benchmarks</li>
+                        <li>Identify country-specific content strategies</li>
+                        <li>Recommend appropriate brand collaborations</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.querySelector('form');
+        const submitBtn = document.getElementById('submit-btn');
+        
+        if (form) {
+            form.addEventListener('submit', function() {
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Processing...';
+                submitBtn.disabled = true;
+            });
+        }
+    });
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hero-section {
+        padding: 3rem 0 1.5rem;
+    }
+    
+    .hero-section h1 {
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 1rem;
+    }
+    
+    .countries-form {
+        border: none;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    
+    .card-header.bg-gradient {
+        background: linear-gradient(45deg, #405de6, #5851db, #833ab4, #c13584, #e1306c, #fd1d1d);
+    }
+    
+    .influencer-list {
+        max-height: 500px;
+        overflow-y: auto;
+        padding-right: 10px;
+    }
+    
+    .influencer-item {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        transition: all 0.3s ease;
+    }
+    
+    .influencer-item:hover {
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    .influencer-header {
+        display: flex;
+        align-items: center;
+        font-weight: 600;
+    }
+    
+    .influencer-header i {
+        color: #c13584;
+        font-size: 1.5rem;
+        margin-right: 10px;
+    }
+    
+    .username {
+        font-size: 1.1rem;
+    }
+    
+    .benefits-list {
+        padding-left: 1.5rem;
+    }
+    
+    .benefits-list li {
+        margin-bottom: 0.5rem;
+        position: relative;
+    }
+    
+    .benefits-list li:before {
+        content: "✓";
+        color: #3897f0;
+        position: absolute;
+        left: -1.2rem;
+        font-weight: bold;
+    }
+</style>
+{% endblock %} 

@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Instagram Influencer Analyzer{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="hero-section text-center">
+        <h1><i class="fas fa-chart-line me-2"></i>Influencer Analysis Dashboard</h1>
+        <p class="lead">Analyzing {{ influencers|length }} influencers across {{ influencers.values()|map(attribute='country')|unique|list|length }} countries</p>
+    </div>
+
+    <!-- Country filter -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title mb-3"><i class="fas fa-globe me-2"></i>Filter by Country</h5>
+                    <div class="d-flex flex-wrap">
+                        <button class="btn btn-outline-primary me-2 mb-2 filter-btn active" data-filter="all">All Countries</button>
+                        {% for country in influencers.values()|map(attribute='country')|unique|sort %}
+                            <button class="btn btn-outline-primary me-2 mb-2 filter-btn" data-filter="{{ country }}">{{ country }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Influencers Grid -->
+    <div class="row">
+        {% for username, influencer in influencers.items() %}
+            <div class="col-md-4 mb-4 influencer-card" data-country="{{ influencer.country }}">
+                <div class="card h-100">
+                    <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            <img src="{{ url_for('static', filename=influencer.profile_pic_local) }}" alt="{{ influencer.full_name }}" class="profile-pic-sm me-2">
+                            <div>
+                                <h5 class="mb-0">{{ influencer.full_name }}</h5>
+                                <small>@{{ username }}</small>
+                            </div>
+                        </div>
+                        <div>
+                            {% if influencer.is_verified %}
+                                <span class="badge bg-primary"><i class="fas fa-check-circle me-1"></i>Verified</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <span class="badge bg-secondary me-1">{{ influencer.country }}</span>
+                            {% if influencer.business_category %}
+                                <span class="badge bg-success">{{ influencer.business_category }}</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <p class="card-text small">{{ influencer.biography|truncate(100) }}</p>
+                        </div>
+                        
+                        <div class="row text-center mb-3">
+                            <div class="col-4">
+                                <h5>{{ '{:,}'.format(influencer.followers_count) }}</h5>
+                                <small class="text-muted">Followers</small>
+                            </div>
+                            <div class="col-4">
+                                <h5>{{ '{:,}'.format(influencer.follows_count) }}</h5>
+                                <small class="text-muted">Following</small>
+                            </div>
+                            <div class="col-4">
+                                <h5>{{ '{:,}'.format(influencer.posts_count) }}</h5>
+                                <small class="text-muted">Posts</small>
+                            </div>
+                        </div>
+                        
+                        {% if influencer.get('main_interests') %}
+                            <div class="mb-3">
+                                <h6><i class="fas fa-star me-2"></i>Main Interests:</h6>
+                                <div>
+                                    {% for interest in influencer.main_interests[:3] %}
+                                        <span class="interest-tag">{{ interest }}</span>
+                                    {% endfor %}
+                                    {% if influencer.main_interests|length > 3 %}
+                                        <span class="interest-tag">+{{ influencer.main_interests|length - 3 }} more</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endif %}
+                        
+                        {% if influencer.get('avg_engagement_rate') is not none %}
+                            <div class="mb-3">
+                                <h6><i class="fas fa-chart-bar me-2"></i>Avg. Engagement:</h6>
+                                <div class="progress">
+                                    {% set engagement_percent = influencer.avg_engagement_rate %}
+                                    {% set bar_class = 'bg-danger' if engagement_percent < 1 else ('bg-warning' if engagement_percent < 3 else 'bg-success') %}
+                                    <div class="progress-bar {{ bar_class }}" role="progressbar" style="width: {{ (engagement_percent * 10)|min(100) }}%">
+                                        {{ '%.2f'|format(engagement_percent) }}%
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+                        
+                        {% if influencer.get('top_hashtags') %}
+                            <div class="mb-3">
+                                <h6><i class="fas fa-hashtag me-2"></i>Top Hashtags:</h6>
+                                <div>
+                                    {% for hashtag, count in (influencer.top_hashtags.items()|list)[:3] %}
+                                        <span class="interest-tag">#{{ hashtag }} ({{ count }})</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer text-center">
+                        <a href="{{ url_for('main.influencer_detail', username=username) }}" class="btn btn-primary">
+                            <i class="fas fa-chart-pie me-1"></i>Detailed Analysis
+                        </a>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Country filter functionality
+        const filterButtons = document.querySelectorAll('.filter-btn');
+        const influencerCards = document.querySelectorAll('.influencer-card');
+        
+        filterButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // Remove active class from all buttons
+                filterButtons.forEach(btn => btn.classList.remove('active'));
+                
+                // Add active class to clicked button
+                this.classList.add('active');
+                
+                const filter = this.getAttribute('data-filter');
+                
+                // Show/hide cards based on filter
+                influencerCards.forEach(card => {
+                    if (filter === 'all' || card.getAttribute('data-country') === filter) {
+                        card.style.display = 'block';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+        });
+    });
+</script>
+{% endblock %} 
