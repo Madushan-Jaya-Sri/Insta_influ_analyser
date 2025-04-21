@@ -130,8 +130,7 @@ jobs:
     - name: Verify Deployment
       run: |
         echo "Deployment complete! Verifying service status..."
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "docker-compose ps"
-    
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser && docker ps"    
     - name: Health Check
       id: health_check
       run: |
