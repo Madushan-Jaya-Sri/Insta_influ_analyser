@@ -19,26 +19,28 @@ jobs:
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H 13.203.105.218 >> ~/.ssh/known_hosts
 
+    - name: Generate .env from secrets
+      run: |
+        echo "FLASK_ENV=production" > .env
+        echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
+        echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+        echo "APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> .env
+
+    - name: Upload .env to EC2
+      run: |
+        scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa .env ubuntu@13.203.105.218:/home/ubuntu/Insta_influ_analyser/.env
+
     - name: Deploy to EC2
       run: |
         ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@13.203.105.218 "
           mkdir -p /home/ubuntu/Insta_influ_analyser
           cd /home/ubuntu/Insta_influ_analyser
 
-          # Clone repo if it doesn't exist, otherwise pull the latest changes
           if [ ! -d \".git\" ]; then
             git clone https://github.com/${{ github.repository }} .
           else
             git fetch --all
             git reset --hard origin/main
-          fi
-
-          # Copy .env file from backup if it exists, otherwise create a new one using secrets
-            echo 'FLASK_ENV=production' > .env
-            echo 'SECRET_KEY=${{ secrets.SECRET_KEY }}' >> .env
-            echo 'OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}' >> .env
-            echo 'APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}' >> .env
-
           fi
 
           mkdir -p certbot/conf certbot/www
@@ -61,9 +63,9 @@ jobs:
             docker-compose -f docker-compose.prod.yml up -d
           fi
 
-          # Backup the .env file
+          # Backup the .env
           cp .env /home/ubuntu/.env.backup
         "
 
     - name: Clean up SSH keys
-      run: rm -rf ~/.ssh
+      run: rm -rf ~/.ssh .env
