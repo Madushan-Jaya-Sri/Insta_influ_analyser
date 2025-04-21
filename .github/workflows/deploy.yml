@@ -7,75 +7,84 @@ on:
 
 jobs:
   deploy:
+    name: Deploy Application to EC2
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
       
-      - name: Setup deployment directory
+      - name: Create deployment package
         run: |
-          echo "Setting up deployment directory..."
-          mkdir -p deploy_temp
-          cp -R . deploy_temp/
-          rm -rf deploy_temp/.git deploy_temp/.github
-      
-      - name: Create .env file
-        run: |
-          echo "Creating .env file..."
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > deploy_temp/.env
-          echo "APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> deploy_temp/.env
-          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> deploy_temp/.env
-          echo ".env file created successfully!"
-      
-      - name: Compress repository
-        run: |
-          echo "Compressing repository..."
-          cd deploy_temp
-          tar -czf ../repository.tar.gz .
+          echo "=== STEP 1: Creating deployment package ==="
+          # Create a fresh deployment directory
+          mkdir -p deployment_package
+          
+          # Copy all files except .git and .github
+          find . -mindepth 1 -maxdepth 1 -not -path "./.git" -not -path "./.github" -exec cp -r {} deployment_package/ \;
+          
+          # Create .env file directly in the deployment package
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > deployment_package/.env
+          echo "APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> deployment_package/.env
+          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> deployment_package/.env
+          
+          # Create the tarball
+          cd deployment_package
+          tar -czf ../deployment.tar.gz .
           cd ..
-          echo "Repository compressed successfully!"
-          ls -la repository.tar.gz
+          
+          # Verify the package size
+          echo "Deployment package created:"
+          ls -lh deployment.tar.gz
       
-      - name: Copy files to EC2
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.AWS_HOST }}
-          username: ${{ secrets.AWS_USERNAME }}
-          key: ${{ secrets.AWS_SSH_KEY }}
-          source: "repository.tar.gz"
-          target: "~"
-          strip_components: 0
-      
-      - name: Deploy on EC2
+      - name: Deploy to EC2
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.AWS_HOST }}
           username: ${{ secrets.AWS_USERNAME }}
           key: ${{ secrets.AWS_SSH_KEY }}
+          command_timeout: 30m
           script: |
-            echo "=== Starting deployment on EC2 ==="
-            echo "Creating application directory..."
+            echo "=== STEP 2: Setting up EC2 environment ==="
+            # Create directories if they don't exist
             mkdir -p ~/Insta_influ_analyser
+      
+      - name: Transfer deployment package
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_SSH_KEY }}
+          source: "deployment.tar.gz"
+          target: "~"
+      
+      - name: Build and launch application
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            echo "=== STEP 3: Deploying application ==="
             
-            echo "Extracting application files..."
-            tar -xzf ~/repository.tar.gz -C ~/Insta_influ_analyser
-            
-            echo "Changing to application directory..."
+            # Extract deployment package
+            echo "Extracting deployment package..."
+            rm -rf ~/Insta_influ_analyser/*
+            tar -xzf ~/deployment.tar.gz -C ~/Insta_influ_analyser
             cd ~/Insta_influ_analyser
             
-            echo "Stopping existing Docker containers..."
+            # Build and start containers
+            echo "Building and starting Docker containers..."
             docker-compose down || true
-            
-            echo "Building and starting new Docker containers..."
             docker-compose up --build -d
             
-            echo "Verifying deployment..."
+            # Verify deployment
+            echo "Verifying deployment:"
             docker ps
             
+            # Cleanup
             echo "Cleaning up..."
             docker image prune -f
-            rm ~/repository.tar.gz
+            rm ~/deployment.tar.gz
             
-            echo "=== Deployment completed successfully! ===" 
+            echo "=== DEPLOYMENT COMPLETED SUCCESSFULLY ===" 
