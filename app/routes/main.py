@@ -227,15 +227,18 @@ def select_countries():
 @main_bp.route('/dashboard')
 def dashboard():
     """Main dashboard displaying influencer analysis"""
-    if not analysis_complete:
+    global data_processor
+    global analysis_complete
+    
+    # Check if we have processed data in memory or saved
+    if data_processor.influencers_data:
+        analysis_complete = True
+        influencers_data = data_processor.influencers_data
+        return render_template('dashboard.html', influencers=influencers_data)
+    else:
+        # No data available
         flash("Please complete the analysis first", 'warning')
         return redirect(url_for('main.index'))
-    
-    # Get processed data from the global data processor
-    global data_processor
-    influencers_data = data_processor.influencers_data
-    
-    return render_template('dashboard.html', influencers=influencers_data)
 
 @main_bp.route('/influencer/<username>')
 def influencer_detail(username):
@@ -599,3 +602,27 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
             f"Error during processing: {str(e)}",
             False
         ) 
+
+# Add a new route for clearing data
+@main_bp.route('/clear-data', methods=['POST'])
+def clear_data():
+    """Clear all processed data"""
+    global data_processor
+    global analysis_complete
+    
+    if request.method == 'POST':
+        try:
+            # Clear data processor data
+            result = data_processor.clear_processed_data()
+            
+            # Reset the analysis complete flag
+            analysis_complete = False
+            
+            if result:
+                flash("All analysis data has been cleared successfully.", 'success')
+            else:
+                flash("Failed to clear analysis data. Please try again.", 'danger')
+        except Exception as e:
+            flash(f"Error clearing data: {str(e)}", 'danger')
+    
+    return redirect(url_for('main.index')) 
