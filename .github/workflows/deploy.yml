@@ -9,18 +9,34 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      
+      - name: Setup deployment directory
+        run: |
+          echo "Setting up deployment directory..."
+          mkdir -p deploy_temp
+          cp -R . deploy_temp/
+          rm -rf deploy_temp/.git deploy_temp/.github
       
       - name: Create .env file
         run: |
           echo "Creating .env file..."
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
-          echo "APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> .env
-          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > deploy_temp/.env
+          echo "APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> deploy_temp/.env
+          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> deploy_temp/.env
+          echo ".env file created successfully!"
       
       - name: Compress repository
         run: |
-          tar -czf repository.tar.gz --exclude='.git' --exclude='.github' .
+          echo "Compressing repository..."
+          cd deploy_temp
+          tar -czf ../repository.tar.gz .
+          cd ..
+          echo "Repository compressed successfully!"
+          ls -la repository.tar.gz
       
       - name: Copy files to EC2
         uses: appleboy/scp-action@master
@@ -28,9 +44,10 @@ jobs:
           host: ${{ secrets.AWS_HOST }}
           username: ${{ secrets.AWS_USERNAME }}
           key: ${{ secrets.AWS_SSH_KEY }}
-          source: "repository.tar.gz,.env"
+          source: "repository.tar.gz"
           target: "~"
-          
+          strip_components: 0
+      
       - name: Deploy on EC2
         uses: appleboy/ssh-action@master
         with:
@@ -38,15 +55,27 @@ jobs:
           username: ${{ secrets.AWS_USERNAME }}
           key: ${{ secrets.AWS_SSH_KEY }}
           script: |
+            echo "=== Starting deployment on EC2 ==="
+            echo "Creating application directory..."
             mkdir -p ~/Insta_influ_analyser
+            
+            echo "Extracting application files..."
             tar -xzf ~/repository.tar.gz -C ~/Insta_influ_analyser
-            cp ~/.env ~/Insta_influ_analyser/.env
+            
+            echo "Changing to application directory..."
             cd ~/Insta_influ_analyser
+            
             echo "Stopping existing Docker containers..."
             docker-compose down || true
+            
             echo "Building and starting new Docker containers..."
             docker-compose up --build -d
+            
+            echo "Verifying deployment..."
+            docker ps
+            
             echo "Cleaning up..."
             docker image prune -f
             rm ~/repository.tar.gz
-            echo "Deployment completed successfully!" 
+            
+            echo "=== Deployment completed successfully! ===" 
