@@ -23,4 +23,4 @@ PORT=${PORT:-5000}
 
 # Start Gunicorn server - make sure working directory is correct
 cd /app
-exec gunicorn --bind 0.0.0.0:${PORT} --workers 3 --timeout 120 "app:create_app()" 
+exec gunicorn --bind 0.0.0.0:${PORT} --workers 3 --timeout 120 wsgi 
