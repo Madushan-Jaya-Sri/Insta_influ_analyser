@@ -7,59 +7,59 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
-      
+
     - name: Set up SSH
       run: |
         mkdir -p ~/.ssh/
         echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H 13.203.105.218 >> ~/.ssh/known_hosts
+
     - name: Deploy to EC2
       run: |
-        ssh -i ~/.ssh/id_rsa ubuntu@13.203.105.218 '
+        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@13.203.105.218 "
           mkdir -p /home/ubuntu/Insta_influ_analyser
           cd /home/ubuntu/Insta_influ_analyser
-    
-          # Clone repo if it doesn't exist, otherwise pull
-          if [ ! -d ".git" ]; then
+
+          if [ ! -d \".git\" ]; then
             git clone https://github.com/${{ github.repository }} .
           else
             git fetch --all
             git reset --hard origin/main
           fi
-    
-          # Copy the .env file from backup if it exists, otherwise create from example
-          if [ -f "/home/ubuntu/.env.backup" ]; then
+
+          if [ -f \"/home/ubuntu/.env.backup\" ]; then
             cp /home/ubuntu/.env.backup .env
           else
             cp .env.example .env
-            # You would need to modify the .env file here if first deployment
           fi
-    
-          # Create required directories
+
           mkdir -p certbot/conf certbot/www
-    
-          # Install Docker Compose if not present
+
+          # Install docker-compose if missing (for Compose v1)
           if ! command -v docker-compose &> /dev/null; then
-            echo "Installing docker-compose..."
-            sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            echo Installing docker-compose...
+            sudo curl -L \"https://github.com/docker/compose/releases/download/v2.24.2/docker-compose-\$(uname -s)-\$(uname -m)\" -o /usr/local/bin/docker-compose
             sudo chmod +x /usr/local/bin/docker-compose
           fi
-    
-          # Deploy with Docker
-          docker-compose -f docker-compose.prod.yml down
-          docker-compose -f docker-compose.prod.yml build --no-cache
-          docker-compose -f docker-compose.prod.yml up -d
-    
-          # Backup the .env file
-          cp .env .env.backup
 
-        '
-    
-  
+          # Use docker compose (v2) if available
+          if command -v docker compose &> /dev/null; then
+            docker compose -f docker-compose.prod.yml down
+            docker compose -f docker-compose.prod.yml build --no-cache
+            docker compose -f docker-compose.prod.yml up -d
+          else
+            docker-compose -f docker-compose.prod.yml down
+            docker-compose -f docker-compose.prod.yml build --no-cache
+            docker-compose -f docker-compose.prod.yml up -d
+          fi
+
+          cp .env /home/ubuntu/.env.backup
+        "
+
     - name: Clean up SSH keys
-      run: rm -rf ~/.ssh 
+      run: rm -rf ~/.ssh
