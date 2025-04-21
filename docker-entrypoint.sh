@@ -1,14 +1,26 @@
 #!/bin/bash
 set -e
 
-# Create necessary directories if they don't exist
-mkdir -p app/uploads app/data app/static/images/profiles app/static/images/posts app/static/images/brand
+# Debug information
+echo "Current directory: $(pwd)"
+echo "Contents of current directory:"
+ls -la
+echo "Python version:"
+python --version
 
-# Set proper permissions
-chmod -R 755 app/uploads app/data app/static
+# Create necessary directories
+mkdir -p /app/app/data
+mkdir -p /app/app/uploads
+mkdir -p /app/app/static/images
 
-# Get the port from environment variable or use default
+# Set permissions
+chmod -R 755 /app/app/data
+chmod -R 755 /app/app/uploads
+chmod -R 755 /app/app/static/images
+
+# Get port from environment or use default
 PORT=${PORT:-5000}
 
-# Start gunicorn server
+# Start Gunicorn server - make sure working directory is correct
+cd /app
 exec gunicorn --bind 0.0.0.0:${PORT} --workers 3 --timeout 120 "app:create_app()" 
