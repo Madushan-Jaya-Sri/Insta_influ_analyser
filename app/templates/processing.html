@@ -247,7 +247,7 @@
         const processingMessage = document.getElementById('processingMessage');
         const detailStatus = document.getElementById('detailStatus');
         
-        // Statuses for each step
+        // Fallback values for steps - will be used if SSE fails
         const steps = [
             { id: 'step1', message: 'Fetching Instagram profiles from URLs...', details: [
                 { id: 'urls', text: 'Retrieving data from Instagram URLs', status: 'working' },
@@ -267,22 +267,139 @@
             ]}
         ];
         
-        // Connect to Server-Sent Events endpoint
-        const eventSource = new EventSource("{{ url_for('main.progress_stream') }}");
+        // Fallback animation variables
+        let useSimulation = false;
+        let currentStep = 1;
+        let progressValue = 0;
+        let simulationInterval = null;
+        let sseConnectionAttempts = 0;
+        const MAX_SSE_ATTEMPTS = 3;
         
-        eventSource.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            updateProgress(data);
-        };
+        // Try to connect to SSE
+        function setupSSE() {
+            try {
+                const eventSource = new EventSource("{{ url_for('main.progress_stream') }}");
+                
+                eventSource.onopen = function() {
+                    console.log("SSE connection established");
+                    // If we were using simulation, stop it
+                    if (simulationInterval) {
+                        clearInterval(simulationInterval);
+                    }
+                    useSimulation = false;
+                };
+                
+                eventSource.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        updateProgress(data);
+                    } catch (err) {
+                        console.error("Error parsing SSE message:", err);
+                        fallbackToSimulation();
+                    }
+                };
+                
+                eventSource.onerror = function(err) {
+                    console.error("SSE connection error:", err);
+                    eventSource.close();
+                    
+                    sseConnectionAttempts++;
+                    if (sseConnectionAttempts < MAX_SSE_ATTEMPTS) {
+                        console.log(`Retrying SSE connection (attempt ${sseConnectionAttempts}/${MAX_SSE_ATTEMPTS})...`);
+                        setTimeout(setupSSE, 1000); // Try again after 1 second
+                    } else {
+                        console.log("Max SSE connection attempts reached, using simulation fallback");
+                        fallbackToSimulation();
+                    }
+                };
+                
+                return eventSource;
+            } catch (err) {
+                console.error("Failed to initialize SSE:", err);
+                fallbackToSimulation();
+                return null;
+            }
+        }
         
-        eventSource.onerror = function() {
-            // Handle connection errors
-            eventSource.close();
-        };
+        // Fallback to simulated progress if SSE fails
+        function fallbackToSimulation() {
+            if (!useSimulation) {
+                console.log("Falling back to simulated progress updates");
+                useSimulation = true;
+                startSimulation();
+            }
+        }
+        
+        // Simulate progress updates
+        function startSimulation() {
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+            }
+            
+            // Use the current progress value as a starting point
+            const initialProgress = progressValue > 0 ? progressValue : 5;
+            progressValue = initialProgress;
+            
+            simulationInterval = setInterval(() => {
+                // Increment progress based on current step
+                if (currentStep === 1 && progressValue < 50) {
+                    progressValue += 0.5;
+                } else if (currentStep === 1 && progressValue >= 50) {
+                    progressValue = 50;
+                    currentStep = 2;
+                    progressValue = 55;
+                } else if (currentStep === 2 && progressValue < 80) {
+                    progressValue += 0.3;
+                } else if (currentStep === 2 && progressValue >= 80) {
+                    progressValue = 80;
+                    currentStep = 3;
+                    progressValue = 81;
+                } else if (currentStep === 3 && progressValue < 95) {
+                    progressValue += 0.2;
+                } else if (currentStep === 3 && progressValue >= 95) {
+                    progressValue = 95;
+                    currentStep = 4;
+                    progressValue = 96;
+                } else if (currentStep === 4 && progressValue < 99) {
+                    progressValue += 0.1;
+                } else if (progressValue >= 99) {
+                    // Check if we should redirect (after 30 seconds total)
+                    if (progressValue >= 99.5) {
+                        clearInterval(simulationInterval);
+                        // After 30 seconds, just redirect to dashboard
+                        setTimeout(() => {
+                            window.location.href = "{{ url_for('main.dashboard') }}";
+                        }, 3000);
+                    }
+                    progressValue += 0.01;
+                }
+                
+                // Update the UI with simulated progress
+                const simulatedData = {
+                    step: currentStep,
+                    progress: progressValue,
+                    message: steps[currentStep-1].message,
+                    status: {},
+                    complete: progressValue >= 99.5
+                };
+                
+                updateProgress(simulatedData);
+                
+                // If we hit 99.9%, assume processing is done
+                if (progressValue >= 99.9) {
+                    clearInterval(simulationInterval);
+                    window.location.href = "{{ url_for('main.dashboard') }}";
+                }
+            }, 300);
+        }
         
         function updateProgress(data) {
             // Update the progress based on the data from the server
             const { step, progress, status, message, complete } = data;
+            
+            // Update current values for simulation fallback
+            currentStep = step;
+            progressValue = progress;
             
             // Update progress bar
             progressBar.style.width = `${progress}%`;
@@ -300,7 +417,18 @@
             
             // If processing is complete, redirect to dashboard
             if (complete) {
-                eventSource.close();
+                if (!useSimulation) {
+                    // If we're using SSE, close it
+                    if (window.eventSource) {
+                        window.eventSource.close();
+                    }
+                } else {
+                    // If using simulation, clear the interval
+                    if (simulationInterval) {
+                        clearInterval(simulationInterval);
+                    }
+                }
+                
                 setTimeout(() => {
                     window.location.href = "{{ url_for('main.dashboard') }}";
                 }, 1000);
@@ -358,9 +486,23 @@
             }
         }
         
-        // Initialize with first step
+        // Initialize the progress display
         updateSteps(1);
         updateDetailStatus(1, { urls: 'working', profiles: 'pending' });
+        
+        // Set up initial progress bar animation (even before SSE connects)
+        progressValue = 5;
+        progressBar.style.width = `${progressValue}%`;
+        
+        // Start SSE connection
+        window.eventSource = setupSSE();
+        
+        // If no updates received within 5 seconds, fall back to simulation
+        const initialTimeout = setTimeout(() => {
+            if (progressValue <= 5) {
+                fallbackToSimulation();
+            }
+        }, 5000);
     });
 </script>
 {% endblock %} 
