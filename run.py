@@ -4,7 +4,7 @@ from flask import Flask
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv()
+load_dotenv(override=True)
 
 def create_app():
     app = Flask(__name__, template_folder='app/templates', static_folder='app/static')

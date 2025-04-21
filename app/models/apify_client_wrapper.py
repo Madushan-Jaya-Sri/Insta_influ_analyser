@@ -3,6 +3,8 @@ import json
 import time
 import tempfile
 from apify_client import ApifyClient
+import logging
+
 
 class ApifyWrapper:
     """A wrapper for the Apify Client to scrape Instagram data"""
@@ -10,6 +12,9 @@ class ApifyWrapper:
     def __init__(self, api_token=None):
         """Initialize the Apify client with an API token"""
         self.api_token = api_token or os.getenv('APIFY_API_TOKEN')
+        print(f"DEBUG: APIFY_API_TOKEN = {self.api_token}")
+        logging.basicConfig(level=logging.INFO)
+        logging.info(f"DEBUG: APIFY_API_TOKEN = {self.api_token}")
         if not self.api_token:
             raise ValueError("Apify API token is not set. Please set the APIFY_API_TOKEN environment variable.")
         self.client = ApifyClient(self.api_token)
