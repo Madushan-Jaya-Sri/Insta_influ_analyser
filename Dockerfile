@@ -7,7 +7,8 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     FLASK_APP=app.py \
-    FLASK_ENV=production
+    FLASK_ENV=production \
+    PYTHONPATH=/app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -28,7 +29,7 @@ RUN pip install --upgrade pip && \
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p app/uploads app/data app/static/images/profiles app/static/images/posts app/static/images/brand
+RUN mkdir -p app/uploads app/data app/static/images/profiles app/static/images/posts app/static/images/wordclouds
 
 # Make the script executable
 RUN chmod +x ./docker-entrypoint.sh
