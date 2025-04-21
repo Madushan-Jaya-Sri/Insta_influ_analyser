@@ -5,6 +5,8 @@
 __pycache__/
 *.py[cod]
 *$py.class
+venv/
+env/
 *.so
 .Python
 build/
@@ -23,11 +25,6 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-env/
-ENV/
-
 # Uploaded files
 uploads/
 
@@ -36,35 +33,4 @@ data/
 
 # System Files
 .DS_Store
-Thumbs.db
-
-# Docker
-.docker/
-
-# SSL certificates
-nginx/ssl/*
-!nginx/ssl/.gitkeep
-
-# Certbot
-certbot/
-
-# Application data
-app/data/*
-!app/data/.gitkeep
-app/uploads/*
-!app/uploads/.gitkeep
-app/static/images/profiles/*
-!app/static/images/profiles/.gitkeep
-app/static/images/posts/*
-!app/static/images/posts/.gitkeep
-app/static/images/brand/*
-!app/static/images/brand/.gitkeep
-
-# IDE files
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Logs
-*.log 
+Thumbs.db 

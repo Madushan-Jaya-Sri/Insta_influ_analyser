@@ -1,0 +1,46 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.AWS_SSH_KEY }}
+          
+      - name: Add SSH Known Hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts
+          
+      - name: Setup environment file
+        run: |
+          echo "Creating .env file..."
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
+          echo "APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> .env
+          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
+          
+      - name: Copy code to EC2
+        run: |
+          rsync -avz --exclude='.git/' --exclude='.github/' --exclude='venv/' . ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser
+          
+      - name: Deploy on EC2
+        run: |
+          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} << 'EOF'
+            cd ~/Insta_influ_analyser
+            echo "Stopping existing Docker containers..."
+            docker-compose down || true
+            echo "Building and starting new Docker containers..."
+            docker-compose up --build -d
+            echo "Cleaning up unused Docker images..."
+            docker image prune -f
+            echo "Deployment completed successfully!"
+          EOF 

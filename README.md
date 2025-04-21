@@ -1,90 +1,98 @@
 # Instagram Influencer Analyzer
 
-A powerful tool for analyzing Instagram influencer profiles and their content using data science and AI. Created by Momentro.
+A tool for analyzing Instagram influencer profiles and engagement metrics, developed by Momentro.
 
 ## Features
 
-- Upload Instagram data files or analyze profiles by URL
-- Analyze engagement metrics, content, and audience insights
-- Generate beautiful visualizations of influencer performance
-- Identify trends and patterns across multiple influencers
-- AI-powered content analysis for deeper insights
+- Analyze Instagram influencers based on profile URLs or data files
+- Calculate engagement metrics and visualize trends
+- Generate content analysis and audience insights
+- Display detailed dashboards for each influencer
 
-## Local Development
+## Deployment with Docker on EC2
 
 ### Prerequisites
 
-- Python 3.9+
-- pip
-- Virtual environment (recommended)
+- An EC2 instance running Ubuntu
+- SSH access to the EC2 instance
+- GitHub repository for the project
+- Docker and Docker Compose installed on the EC2 instance
 
-### Setup
+### Setting Up the EC2 Instance
 
-1. Clone the repository
-```bash
-git clone https://github.com/your-username/Insta_influ_analyser.git
-cd Insta_influ_analyser
-```
+1. SSH into your EC2 instance:
+   ```bash
+   ssh -i /path/to/your/key.pem ubuntu@65.0.181.3
+   ```
 
-2. Create and activate a virtual environment
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+2. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/Insta_influ_analyser.git
+   cd Insta_influ_analyser
+   ```
 
-3. Install dependencies
-```bash
-pip install -r requirements.txt
-```
+3. Run the setup script:
+   ```bash
+   chmod +x deploy_ec2.sh
+   ./deploy_ec2.sh
+   ```
 
-4. Set up environment variables
-```bash
-cp .env.example .env  # And then edit the .env file with your credentials
-```
+4. Create a `.env` file with your API keys:
+   ```bash
+   cp .env.example .env
+   nano .env
+   ```
+   Update with your actual API keys for OpenAI and Apify.
 
-5. Run the application
-```bash
-python app.py
-```
+### Manual Deployment
 
-The application will be available at http://localhost:5000
+1. Build and start Docker containers:
+   ```bash
+   docker-compose up --build -d
+   ```
 
-## Docker Deployment
+2. Check if the application is running:
+   ```bash
+   docker-compose ps
+   ```
 
-### Local Docker Deployment
+3. View logs if needed:
+   ```bash
+   docker-compose logs -f
+   ```
 
-1. Prerequisites
-   - Docker and Docker Compose installed
+### CI/CD with GitHub Actions
 
-2. Build and run with Docker Compose
-```bash
-# For development
-docker-compose -f docker-compose.dev.yml up -d
+To set up automatic deployment with GitHub Actions:
 
-# For production (with Nginx)
-docker-compose up -d
-```
+1. Add the following secrets to your GitHub repository:
+   - `AWS_SSH_KEY`: Your EC2 SSH private key (contents of the .pem file)
+   - `AWS_HOST`: Your EC2 instance hostname or IP (e.g., 65.0.181.3)
+   - `AWS_USERNAME`: Your EC2 username (e.g., ubuntu)
+   - `OPENAI_API_KEY`: Your OpenAI API key
+   - `APIFY_API_TOKEN`: Your Apify API token
+   - `SECRET_KEY`: A secure random string for Flask
 
-3. Access the application
-   - Development: http://localhost:5000
-   - Production: http://localhost
+2. Push to the main branch to trigger deployment, or manually trigger the workflow from the GitHub Actions tab.
 
-### Production Deployment
+## Local Development
 
-For detailed instructions on deploying to production environments, see:
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-- [Docker Deployment Guide](DOCKER-DEPLOYMENT.md)
-- [EC2 Deployment Guide](EC2-DEPLOYMENT.md) 
-- [CI/CD Pipeline Guide](CICD.md)
+2. Set up environment variables:
+   ```bash
+   cp .env.example .env
+   # Edit .env file with your API keys
+   ```
 
-## CI/CD Pipeline
-
-This project uses GitHub Actions for continuous integration and deployment. See [CICD.md](CICD.md) for details.
-
-## API Documentation
-
-The application provides a REST API for accessing influencer data programmatically. See [API.md](API.md) for details.
+3. Run the application:
+   ```bash
+   python app.py
+   ```
 
 ## License
 
-© 2025 Momentro. All rights reserved. # Deployment test
+© 2025 Momentro. All rights reserved. 

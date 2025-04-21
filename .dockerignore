@@ -1,39 +1,43 @@
-# Git
+# Git files
 .git
 .gitignore
-.github
 
-# Environment
-.env
-venv/
-env/
-.venv/
-.env.example
-
-# Python cache
+# Python cache files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-.pytest_cache/
-.coverage
-htmlcov/
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Docker
-Dockerfile
-docker-compose.yml
+# Docker files
 .dockerignore
+Dockerfile
 
-# Documentation
-*.md
-!README.md
-
-# Data files
-app/data/*
+# Local files
 app/uploads/*
-app/static/images/profiles/*
+app/data/*
 app/static/images/posts/*
+app/static/images/profiles/*
+*.log
+*.csv
+*.json
 
 # IDE files
 .idea/
@@ -41,15 +45,8 @@ app/static/images/posts/*
 *.swp
 *.swo
 
-# Test files
-tests/
+# CI/CD files
+.github/
 
-# Logs
-*.log
-
-# Local SSL certificates
-nginx/ssl/*
-
-# Temporary files
-.DS_Store
-Thumbs.db 
+# Keep .gitkeep files
+!.gitkeep 
