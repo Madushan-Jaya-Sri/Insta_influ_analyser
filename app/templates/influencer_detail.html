@@ -9,13 +9,11 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 <link rel="stylesheet" href="/static/styles.css">
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- Chart.js and plugins -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 
 <style>
     body {
@@ -197,39 +195,6 @@
     .avg-comments-card {
         background: linear-gradient(135deg, #f0fff8, #e6fff2);
         border-left: 4px solid #8bc34a;
-    }
-    
-    /* Sample posts specific styles */
-    .scroll-cards {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 15px;
-        padding: 15px 0;
-    }
-    
-    @media (min-width: 992px) {
-        .scroll-cards {
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            padding-bottom: 15px;
-        }
-    }
-    
-    .post-card {
-        flex: 0 0 auto;
-        width: 100%;
-        max-width: 300px;
-    }
-    
-    @media (max-width: 991px) {
-        .post-card {
-            max-width: 100%;
-        }
-    }
-    
-    .card-img-top {
-        height: 200px;
-        object-fit: cover;
     }
 </style>
 {% endblock %}
@@ -478,11 +443,11 @@
             <div class="card-body">
                 <div class="scroll-cards">
                     {% for post in influencer.posts %}
-                        <div class="card post-card">
+                        <div class="card">
                             {% if post.display_url_local %}
                                 <img src="{{ url_for('static', filename=post.display_url_local) }}" class="card-img-top" alt="Instagram Post">
                             {% else %}
-                                <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 200px;">
+                                <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 300px;">
                                     <i class="fas fa-image fa-3x text-muted"></i>
                                 </div>
                             {% endif %}
