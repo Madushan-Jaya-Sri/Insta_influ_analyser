@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 def create_app():
-    app = Flask(__name__, template_folder='app/templates', static_folder='app/static')
+    app = Flask(__name__, template_folder='app/templates', static_folder='app/static', static_url_path='/static')
     
     # Configure app
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-dev-key')

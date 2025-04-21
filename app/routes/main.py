@@ -351,20 +351,35 @@ def processing():
 def progress_stream():
     def generate():
         last_data = None
+        retry_count = 0
         while True:
-            with processing_lock:
-                current_data = json.dumps(progress_data)
+            try:
+                with processing_lock:
+                    current_data = json.dumps(progress_data)
+                    
+                if current_data != last_data:
+                    last_data = current_data
+                    yield f"data: {current_data}\n\n"
+                    retry_count = 0
                 
-            if current_data != last_data:
-                last_data = current_data
-                yield f"data: {current_data}\n\n"
-            
-            if progress_data['complete']:
-                break
-                
-            time.sleep(0.5)
+                if progress_data['complete']:
+                    print("Processing complete, ending SSE stream")
+                    break
+                    
+                time.sleep(0.5)
+            except Exception as e:
+                print(f"Error in SSE stream: {str(e)}")
+                retry_count += 1
+                if retry_count > 5:  # After 5 retries, give up
+                    print("Too many errors in SSE stream, closing connection")
+                    break
+                time.sleep(1)  # Wait a bit longer on error
     
-    return Response(generate(), mimetype='text/event-stream')
+    response = Response(generate(), mimetype='text/event-stream')
+    # Add headers to prevent caching
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'  # Disable nginx buffering
+    return response
 
 def process_data_in_background(profile_path, posts_path, country_mapping):
     try:
