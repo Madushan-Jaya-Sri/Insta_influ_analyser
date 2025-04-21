@@ -4,7 +4,7 @@
 set -e
 
 # Configuration - using the pre-configured SSH settings
-EC2_HOST="65.0.181.3"
+EC2_HOST="13.203.105.218"
 SSH_KEY_PATH="/Users/jayasri/Downloads/IG-Analyzer-momentro.pem"
 REMOTE_DIR="/home/ubuntu/Insta_influ_analyser"
 
@@ -87,6 +87,6 @@ rm deploy.tar.gz
 
 echo "Deployment completed successfully!"
 if [ "$USE_SSH_CONFIG" = true ]; then
-    echo "Your application should be running at http://IG-Analyzer-momentro (65.0.181.3)"
+    echo "Your application should be running at http://IG-Analyzer-momentro (13.203.105.218)"
 else
     echo "Your application should be running at http://$EC2_HOST" 
