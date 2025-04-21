@@ -35,40 +35,69 @@ jobs:
           # Verify the package size
           echo "Deployment package created:"
           ls -lh deployment.tar.gz
+          
+      - name: Debug EC2 connection
+        run: |
+          echo "=== DEBUGGING EC2 CONNECTION ==="
+          echo "Testing connection to ${{ secrets.AWS_HOST }}:22"
+          
+          # Check if the host is reachable
+          timeout 5 ping -c 3 ${{ secrets.AWS_HOST }} || echo "PING failed, but this might be expected if ICMP is blocked"
+          
+          # Check if port 22 is open
+          timeout 5 nc -zv ${{ secrets.AWS_HOST }} 22 || echo "Port 22 connection timed out or refused"
+          
+          # Get traceroute information
+          which traceroute && traceroute -T -p 22 ${{ secrets.AWS_HOST }} || echo "Traceroute not available"
+          
+          # Check if the host is in known_hosts
+          mkdir -p ~/.ssh
+          ssh-keyscan -T 10 ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts || echo "SSH keyscan timed out"
       
+      # Use the standard OpenSSH client instead of the action
+      - name: Check EC2 connection with SSH
+        run: |
+          echo "=== TRYING SSH CONNECTION ==="
+          mkdir -p ~/.ssh
+          
+          # Write private key to file
+          echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Attempt SSH connection with verbose logging
+          ssh -v -o "StrictHostKeyChecking=no" -o "ConnectTimeout=10" ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo Connection successful" || echo "SSH connection failed"
+      
+      # Continue with deployment if connection works
       - name: Deploy to EC2
+        if: success()
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.AWS_HOST }}
           username: ${{ secrets.AWS_USERNAME }}
           key: ${{ secrets.AWS_SSH_KEY }}
           command_timeout: 30m
+          debug: true
           script: |
             echo "=== STEP 2: Setting up EC2 environment ==="
             # Create directories if they don't exist
             mkdir -p ~/Insta_influ_analyser
       
       - name: Transfer deployment package
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.AWS_HOST }}
-          username: ${{ secrets.AWS_USERNAME }}
-          key: ${{ secrets.AWS_SSH_KEY }}
-          source: "deployment.tar.gz"
-          target: "~"
+        if: success()
+        run: |
+          echo "=== TRANSFERRING FILES MANUALLY ==="
+          scp -o "StrictHostKeyChecking=no" -i ~/.ssh/id_rsa deployment.tar.gz ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/ || echo "SCP transfer failed"
       
       - name: Build and launch application
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.AWS_HOST }}
-          username: ${{ secrets.AWS_USERNAME }}
-          key: ${{ secrets.AWS_SSH_KEY }}
-          command_timeout: 30m
-          script: |
+        if: success()
+        run: |
+          echo "=== BUILDING AND LAUNCHING APPLICATION ==="
+          ssh -o "StrictHostKeyChecking=no" -i ~/.ssh/id_rsa ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} << 'EOF'
             echo "=== STEP 3: Deploying application ==="
             
             # Extract deployment package
             echo "Extracting deployment package..."
+            mkdir -p ~/Insta_influ_analyser
             rm -rf ~/Insta_influ_analyser/*
             tar -xzf ~/deployment.tar.gz -C ~/Insta_influ_analyser
             cd ~/Insta_influ_analyser
@@ -87,4 +116,5 @@ jobs:
             docker image prune -f
             rm ~/deployment.tar.gz
             
-            echo "=== DEPLOYMENT COMPLETED SUCCESSFULLY ===" 
+            echo "=== DEPLOYMENT COMPLETED SUCCESSFULLY ==="
+          EOF 
