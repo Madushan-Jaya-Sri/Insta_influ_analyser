@@ -1,19 +1,21 @@
 version: '3.8'
 
 services:
-  insta_influ_analyser:
+  web:
     build: .
-    container_name: insta_influ_analyser
-    restart: always
     ports:
-      - "5000:5000"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - APIFY_API_TOKEN=${APIFY_API_TOKEN}
-      - SECRET_KEY=${SECRET_KEY}
+      - "8000:8000"
     volumes:
+      - ./app:/app/app
       - ./app/uploads:/app/app/uploads
       - ./app/data:/app/app/data
-      - ./app/static/images/posts:/app/app/static/images/posts
-      - ./app/static/images/profiles:/app/app/static/images/profiles
-      - ./app/static/images/brand:/app/app/static/images/brand 
+      - ./app/static:/app/app/static
+    env_file:
+      - .env
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s 

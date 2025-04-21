@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    env_file:
+      - .env
+    restart: always
+    volumes:
+      - app_data:/app/app/data
+      - app_uploads:/app/app/uploads
+      - app_images:/app/app/static/images
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - app_network
+
+  nginx:
+    image: nginx:1.23-alpine
+    ports:
+      - "80:80"
+      - "443:443" # For SSL
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+      - app_images:/app/app/static/images:ro
+    depends_on:
+      - web
+    restart: always
+    networks:
+      - app_network
+
+  # Uncomment for SSL
+  # certbot:
+  #   image: certbot/certbot
+  #   volumes:
+  #     - ./certbot/conf:/etc/letsencrypt
+  #     - ./certbot/www:/var/www/certbot
+  #   entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+volumes:
+  app_data:
+  app_uploads:
+  app_images:
+
+networks:
+  app_network: 
