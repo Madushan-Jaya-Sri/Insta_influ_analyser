@@ -7,6 +7,10 @@ echo "Contents of current directory:"
 ls -la
 echo "Python version:"
 python --version
+echo "Python path:"
+python -c "import sys; print(sys.path)"
+echo "Check for create_app in app.py:"
+python -c "import app; print(dir(app)); print('create_app' in dir(app))"
 
 # Create necessary directories
 mkdir -p /app/app/data
@@ -21,6 +25,6 @@ chmod -R 755 /app/app/static/images
 # Get port from environment or use default
 PORT=${PORT:-5000}
 
-# Start Gunicorn server - make sure working directory is correct
+# Start Gunicorn server - use main.py instead of app.py
 cd /app
-exec gunicorn --bind 0.0.0.0:${PORT} --workers 3 --timeout 120 wsgi 
+exec gunicorn --bind 0.0.0.0:${PORT} --workers 3 --timeout 120 "main:create_app()" 
