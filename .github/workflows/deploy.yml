@@ -25,6 +25,7 @@ jobs:
           mkdir -p /home/ubuntu/Insta_influ_analyser
           cd /home/ubuntu/Insta_influ_analyser
 
+          # Clone repo if it doesn't exist, otherwise pull the latest changes
           if [ ! -d \".git\" ]; then
             git clone https://github.com/${{ github.repository }} .
           else
@@ -32,15 +33,21 @@ jobs:
             git reset --hard origin/main
           fi
 
+          # Copy .env file from backup if it exists, otherwise create a new one using secrets
           if [ -f \"/home/ubuntu/.env.backup\" ]; then
             cp /home/ubuntu/.env.backup .env
           else
             cp .env.example .env
+
+            # Replace placeholders in .env with GitHub secrets
+            sed -i \"s/your_openai_api_key_here/${{ secrets.OPENAI_API_KEY }}/\" .env
+            sed -i \"s/your_apify_api_token_here/${{ secrets.APIFY_API_TOKEN }}/\" .env
+            sed -i \"s/your_random_secure_key_here/${{ secrets.SECRET_KEY }}/\" .env
           fi
 
           mkdir -p certbot/conf certbot/www
 
-          # Install docker-compose if missing (for Compose v1)
+          # Install docker-compose if it's not available
           if ! command -v docker-compose &> /dev/null; then
             echo Installing docker-compose...
             sudo curl -L \"https://github.com/docker/compose/releases/download/v2.24.2/docker-compose-\$(uname -s)-\$(uname -m)\" -o /usr/local/bin/docker-compose
@@ -58,6 +65,7 @@ jobs:
             docker-compose -f docker-compose.prod.yml up -d
           fi
 
+          # Backup the .env file
           cp .env /home/ubuntu/.env.backup
         "
 
