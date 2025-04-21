@@ -90,3 +90,4 @@ if [ "$USE_SSH_CONFIG" = true ]; then
     echo "Your application should be running at http://IG-Analyzer-momentro (13.203.105.218)"
 else
     echo "Your application should be running at http://$EC2_HOST" 
+    
