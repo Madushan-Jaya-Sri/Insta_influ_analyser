@@ -26,10 +26,9 @@ wheels/
 *.egg
 
 # Uploaded files
-uploads/
 
-# User data
-data/
+
+
 
 # System Files
 .DS_Store

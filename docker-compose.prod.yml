@@ -7,9 +7,9 @@ services:
       - .env
     restart: always
     volumes:
+      - app_static:/app/app/static
       - app_data:/app/app/data
       - app_uploads:/app/app/uploads
-      - app_images:/app/app/static/images
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000"]
       interval: 30s
@@ -25,7 +25,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf  # <- use HTTP-only config
-      - app_images:/app/app/static/images:ro
+      - app_static:/app/app/static:ro
     depends_on:
       - web
     restart: always
@@ -35,7 +35,7 @@ services:
 volumes:
   app_data:
   app_uploads:
-  app_images:
+  app_static:
 
 networks:
   app_network:
