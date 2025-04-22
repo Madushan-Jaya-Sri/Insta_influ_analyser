@@ -5,6 +5,7 @@ import uuid
 import threading
 from datetime import datetime
 from functools import wraps
+import shutil # Import shutil for directory operations
 
 from flask import (
     Blueprint, render_template, redirect, url_for, request,
@@ -19,7 +20,7 @@ from app.models.apify_client_wrapper import ApifyWrapper
 
 main_bp = Blueprint('main', __name__)
 
-# Global data processor
+# Global data processor - now loads data on init
 data_processor = DataProcessor()
 
 # Global progress data
@@ -31,8 +32,9 @@ progress_data = {
     'complete': False
 }
 
-# Global flag to track analysis completion
-analysis_complete = False
+# Global flag to track analysis completion - less critical now with persistent data
+# We can rely on checking if data_processor.influencers_data is populated
+analysis_complete = False 
 
 processing_lock = threading.Lock()
 
@@ -56,6 +58,10 @@ def update_progress(step, progress, status=None, message=None, complete=False):
         if message:
             progress_data['message'] = message
         progress_data['complete'] = complete
+        # Update global analysis_complete flag when processing finishes
+        if complete:
+            global analysis_complete
+            analysis_complete = True
 
 @main_bp.route('/', methods=['GET', 'POST'])
 def index():
@@ -227,46 +233,45 @@ def select_countries():
 @main_bp.route('/dashboard')
 def dashboard():
     """Main dashboard displaying influencer analysis"""
-    global data_processor
-    global analysis_complete
-    
-    # Check if we have processed data in memory or saved
-    if data_processor.influencers_data:
-        analysis_complete = True
-        influencers_data = data_processor.influencers_data
-        return render_template('dashboard.html', influencers=influencers_data)
-    else:
-        # No data available
+    if not analysis_complete:
         flash("Please complete the analysis first", 'warning')
         return redirect(url_for('main.index'))
+    
+    # Get processed data from the global data processor
+    global data_processor
+    influencers_data = data_processor.influencers_data
+    
+    return render_template('dashboard.html', influencers=influencers_data)
 
 @main_bp.route('/influencer/<username>')
 def influencer_detail(username):
     """Detailed view for a specific influencer"""
-    if not analysis_complete:
-        flash("Please complete the analysis first", 'warning')
+    global data_processor # Ensure we are using the global instance
+    # Check if data exists, either from current run or loaded file
+    if not data_processor.influencers_data:
+        flash("No influencer data available. Please process data first.", 'warning')
         return redirect(url_for('main.dashboard'))
-    
+
     # Get data from the global data processor
-    global data_processor
     influencer = data_processor.influencers_data.get(username)
-    
+
     if not influencer:
         flash(f"Influencer @{username} not found", 'warning')
         return redirect(url_for('main.dashboard'))
-    
+
     return render_template('influencer_detail.html', influencer=influencer)
 
 @main_bp.route('/api/influencer/<username>')
 def influencer_api(username):
     """API endpoint for fetching influencer data for charts"""
-    if not analysis_complete:
-        return jsonify({'error': 'Analysis not complete. Please process data first.'}), 400
-    
+    global data_processor # Ensure we are using the global instance
+    # Check if data exists
+    if not data_processor.influencers_data:
+        return jsonify({'error': 'No influencer data available. Please process data first.'}), 400
+
     # Get data from the global data processor
-    global data_processor
     influencers_data = data_processor.influencers_data
-    
+
     if username not in influencers_data:
         return jsonify({'error': 'Influencer not found'}), 404
     
@@ -389,83 +394,40 @@ def process_data_in_background(profile_path, posts_path, country_mapping):
         # Use the existing global data processor
         global data_processor
         global analysis_complete
-        
+        analysis_complete = False # Reset flag at the start of processing
+
         update_progress(1, 5, {'parsing': 'working'}, 'Parsing JSON files...')
         time.sleep(0.5)  # Simulate processing time
-        
-        # Load profile data
+
+        # Load profile data (this now clears previous data)
         update_progress(1, 20, {'parsing': 'complete', 'profile': 'working'}, 'Extracting profile data...')
         data_processor.load_profile_data(profile_path)
         time.sleep(0.5)  # Simulate processing time
-        
+
         # Load posts data
         update_progress(1, 35, {'profile': 'complete', 'posts': 'working'}, 'Extracting post data...')
         data_processor.load_posts_data(posts_path)
         time.sleep(0.5)  # Simulate processing time
-        
+
         # Set countries for influencers
         for username, country in country_mapping.items():
             data_processor.set_country(username, country)
-        
+
         update_progress(1, 50, {'posts': 'complete', 'stats': 'working'}, 'Calculating statistics...')
         time.sleep(0.5)  # Simulate processing time
-        
-        # Process data
+
+        # Process data (this now saves the data at the end)
         data_processor.merge_data()
         data_processor.process_influencer_data()
-        
-        update_progress(1, 70, {'stats': 'complete'}, 'Basic data processing complete')
-        
-        # Image processing
-        update_progress(2, 75, {'profile_pics': 'working'}, 'Downloading profile pictures...')
-        time.sleep(0.5)  # Simulate processing time
-        
-        # Download images is now handled in process_influencer_data
-        # No need to call download_images separately
-        
-        update_progress(2, 80, {'profile_pics': 'complete', 'post_pics': 'working'}, 'Downloading post images...')
-        time.sleep(0.5)  # Simulate processing time
-        
-        update_progress(2, 85, {'post_pics': 'complete', 'optimize': 'working'}, 'Optimizing images...')
-        time.sleep(0.5)  # Simulate processing time
-        
-        update_progress(2, 90, {'optimize': 'complete'}, 'Image processing complete')
-        
-        # Content analysis with LLM
-        update_progress(3, 91, {'captions': 'working'}, 'Analyzing captions and hashtags...')
-        time.sleep(0.5)  # Simulate processing time
-        
-        update_progress(3, 93, {'captions': 'complete', 'interests': 'working'}, 'Identifying main interests...')
-        time.sleep(0.5)  # Simulate processing time
-        
-        # Analyze with LLM
-        openai_api_key = os.getenv('OPENAI_API_KEY')
-        if openai_api_key:
-            data_processor.analyze_with_llm(openai_api_key)
-        
-        update_progress(3, 95, {'interests': 'complete', 'brands': 'working'}, 'Identifying brand affiliations...')
-        time.sleep(0.5)  # Simulate processing time
-        
-        update_progress(3, 97, {'brands': 'complete'}, 'Content analysis complete')
-        
-        # Engagement metrics calculation
-        update_progress(4, 98, {'rates': 'working'}, 'Computing engagement rates...')
-        time.sleep(0.5)  # Simulate processing time
-        
-        # Calculate engagement metrics
-        # Engagement metrics already calculated in process_influencer_data
-        
-        update_progress(4, 99, {'rates': 'complete', 'metrics': 'working'}, 'Generating time-based metrics...')
-        time.sleep(0.5)  # Simulate processing time
-        
-        update_progress(4, 99.5, {'metrics': 'complete', 'visualization': 'working'}, 'Preparing visualization data...')
-        time.sleep(0.5)  # Simulate processing time
-        
-        # Set the analysis complete flag using the global variable
+
+        # update_progress calls will happen inside process_influencer_data if needed
+        # Simplified progress updates here
+
+        # Set the analysis complete flag
         analysis_complete = True
-        
+
         update_progress(4, 100, {'visualization': 'complete'}, 'Processing complete!', True)
-        
+
     except Exception as e:
         print(f"Error in background processing: {str(e)}")
         update_progress(
@@ -482,10 +444,10 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
         # Use the existing global data processor
         global data_processor
         global analysis_complete
-        global background_data
-        
+        analysis_complete = False # Reset flag
+
         update_progress(1, 5, {'parsing': 'working'}, 'Initializing URL processing...')
-        
+
         # Create ApifyWrapper instance
         try:
             apify_client = ApifyWrapper()
@@ -588,7 +550,7 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
         # Engagement metrics calculation already done in process_influencer_data
         update_progress(4, 99, {'rates': 'complete', 'metrics': 'complete'}, 'All metrics calculated')
         
-        # Set the analysis complete flag using the global variable
+        # Set the analysis complete flag
         analysis_complete = True
         
         update_progress(4, 100, {'visualization': 'complete'}, 'Processing complete!', True)
@@ -601,28 +563,36 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
             None,
             f"Error during processing: {str(e)}",
             False
-        ) 
+        )
 
-# Add a new route for clearing data
+# Example: Check if profile picture exists before downloading
+# if not os.path.exists(os.path.join(current_app.config['IMAGES_FOLDER'], f'{profile_id}.jpg')):
+#     # Download and save the profile picture
+#     pass
+
+# Example: Check if post image exists before downloading
+# if not os.path.exists(os.path.join(current_app.config['IMAGES_FOLDER'], f'{post_id}.jpg')):
+#     # Download and save the post image
+#     pass
+
 @main_bp.route('/clear-data', methods=['POST'])
 def clear_data():
-    """Clear all processed data"""
-    global data_processor
-    global analysis_complete
-    
-    if request.method == 'POST':
-        try:
-            # Clear data processor data
-            result = data_processor.clear_processed_data()
-            
-            # Reset the analysis complete flag
-            analysis_complete = False
-            
-            if result:
-                flash("All analysis data has been cleared successfully.", 'success')
-            else:
-                flash("Failed to clear analysis data. Please try again.", 'danger')
-        except Exception as e:
-            flash(f"Error clearing data: {str(e)}", 'danger')
-    
-    return redirect(url_for('main.index')) 
+    try:
+        global data_processor
+        global analysis_complete
+
+        # Always clear images when this endpoint is called
+        clear_images = True
+
+        # Use the clear_all_data method from DataProcessor
+        data_processor.clear_all_data(clear_images=clear_images)
+
+        # Reset the analysis complete flag
+        analysis_complete = False
+
+        flash('All application data and images have been cleared.', 'success')
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error clearing data: {e}")
+        flash('An error occurred while clearing data.', 'danger')
+        return jsonify({'success': False}), 500 

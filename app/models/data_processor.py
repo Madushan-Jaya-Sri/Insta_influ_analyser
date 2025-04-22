@@ -12,23 +12,135 @@ import base64
 from io import BytesIO
 from collections import defaultdict, Counter
 import requests
-import pickle
+import shutil # Added for clear_data potential image deletion
+
+# Define the path for the data file relative to the script's location
+# This assumes run.py is in the root and calls create_app which sets up paths
+# A more robust way might involve passing the data path from the app config
+APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_DATA_PATH = os.path.join(APP_ROOT, 'data', 'influencers.json')
+DEFAULT_IMAGES_PATH = os.path.join(APP_ROOT, 'static', 'images')
 
 class DataProcessor:
-    def __init__(self):
+    def __init__(self, data_file_path=DEFAULT_DATA_PATH):
         self.profile_data = None
         self.posts_data = None
         self.merged_data = None
         self.influencers_data = {}
         self.countries = {}
-        self.data_folder = 'app/data'
-        self.persistence_file = os.path.join(self.data_folder, 'processed_data.pkl')
-        
-        # Try to load existing data on initialization
-        self.load_processed_data()
+        self.data_file_path = data_file_path
+        self._load_persistent_data() # Load existing data on initialization
     
+    def _load_persistent_data(self):
+        """Load data from the persistent JSON file if it exists."""
+        if os.path.exists(self.data_file_path):
+            try:
+                with open(self.data_file_path, 'r', encoding='utf-8') as f:
+                    self.influencers_data = json.load(f)
+                # Rebuild countries mapping from loaded data
+                self.countries = {username: data.get('country', '') 
+                                  for username, data in self.influencers_data.items()}
+                print(f"Loaded {len(self.influencers_data)} influencers from {self.data_file_path}")
+            except (FileNotFoundError, json.JSONDecodeError, Exception) as e:
+                print(f"Error loading persistent data from {self.data_file_path}: {e}")
+                # If loading fails, start fresh
+                self.influencers_data = {}
+                self.countries = {}
+        else:
+            print(f"Persistent data file not found: {self.data_file_path}. Starting fresh.")
+    
+    def _save_persistent_data(self):
+        """Save the current influencers_data to the JSON file."""
+        try:
+            # Ensure the directory exists
+            os.makedirs(os.path.dirname(self.data_file_path), exist_ok=True)
+            with open(self.data_file_path, 'w', encoding='utf-8') as f:
+                # Use custom default handler for non-serializable types if needed
+                json.dump(self.influencers_data, f, indent=4, default=self._json_serializer)
+            print(f"Saved {len(self.influencers_data)} influencers to {self.data_file_path}")
+        except Exception as e:
+            print(f"Error saving persistent data to {self.data_file_path}: {e}")
+            traceback.print_exc()
+    
+    def _json_serializer(self, obj):
+        """Custom JSON serializer for objects not serializable by default json code"""
+        if isinstance(obj, (datetime.date, datetime.datetime)):
+            return obj.isoformat()
+        # Handle numpy types if they appear
+        if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
+                            np.int16, np.int32, np.int64, np.uint8,
+                            np.uint16, np.uint32, np.uint64)):
+            return int(obj)
+        elif isinstance(obj, (np.float_, np.float16, np.float32,
+                              np.float64)):
+            # Handle NaN and Inf
+            if np.isnan(obj):
+                return None  # Or 0, or 'NaN' as a string
+            if np.isinf(obj):
+                # Represent infinity appropriately, e.g., None or a large number string
+                return None # Or str(obj)
+            return float(obj)
+        elif isinstance(obj, (np.ndarray,)): # Handle arrays if needed
+            return obj.tolist() # Convert arrays to lists
+        elif isinstance(obj, (np.bool_)):
+            return bool(obj)
+        elif isinstance(obj, (np.void)): # Handle numpy void types
+            return None
+        # Add more types here if needed
+        print(f"Warning: Cannot serialize type {type(obj)}: {obj}")
+        return str(obj) # Fallback to string representation
+
+    def clear_all_data(self, clear_images=False, images_path=DEFAULT_IMAGES_PATH):
+        """Clears persisted data and optionally images."""
+        # Clear in-memory data
+        self.profile_data = None
+        self.posts_data = None
+        self.merged_data = None
+        self.influencers_data = {}
+        self.countries = {}
+        
+        # Delete the JSON data file
+        if os.path.exists(self.data_file_path):
+            try:
+                os.remove(self.data_file_path)
+                print(f"Deleted persistent data file: {self.data_file_path}")
+            except OSError as e:
+                print(f"Error deleting data file {self.data_file_path}: {e}")
+
+        # Optionally clear images
+        if clear_images:
+            for subdir in ['profiles', 'posts', 'misc']:
+                dir_to_clear = os.path.join(images_path, subdir)
+                if os.path.exists(dir_to_clear):
+                    try:
+                        # Remove all files within the directory
+                        for filename in os.listdir(dir_to_clear):
+                            file_path = os.path.join(dir_to_clear, filename)
+                            try:
+                                if os.path.isfile(file_path) or os.path.islink(file_path):
+                                    os.unlink(file_path)
+                                # Optionally remove subdirectories if needed, but be careful
+                                # elif os.path.isdir(file_path): shutil.rmtree(file_path) 
+                            except Exception as e:
+                                print(f'Failed to delete {file_path}. Reason: {e}')
+                        print(f"Cleared image files in: {dir_to_clear}")
+                    except OSError as e:
+                        print(f"Error clearing images in {dir_to_clear}: {e}")
+        
+        print("All data cleared.")
+
     def load_profile_data(self, file_path):
         """Load the Instagram profile data JSON file"""
+        # Clear existing data before loading new profiles
+        self.profile_data = None
+        self.posts_data = None
+        self.merged_data = None
+        # Don't clear influencers_data here if we want to merge with existing persistent data
+        # If each load should replace everything, uncomment the next two lines:
+        # self.influencers_data = {}
+        # self.countries = {}
+        print("Cleared previous in-memory data before loading new profiles.")
+        
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -82,8 +194,8 @@ class DataProcessor:
         self.countries[username] = country
         print(f"Set country for {username}: {country}")
     
-    def download_profile_image(self, username, profile_pic_url, profile_id=None, save_dir='app/static/images/profiles'):
-        """Download profile image for a specific influencer using profile ID or username as filename"""
+    def download_profile_image(self, username, profile_pic_url, save_dir='app/static/images/profiles'):
+        """Download profile image for a specific influencer using username as filename"""
         if not profile_pic_url or pd.isna(profile_pic_url):
             print(f"No profile picture URL for {username}")
             return None
@@ -91,9 +203,8 @@ class DataProcessor:
         # Create profiles directory if it doesn't exist
         os.makedirs(save_dir, exist_ok=True)
         
-        # Use profile ID if available, otherwise use username
-        filename_base = profile_id if profile_id else username
-        filename = f"{filename_base}.jpg"
+        # Use username as the filename
+        filename = f"{username}.jpg"
         local_path = os.path.join(save_dir, filename)
         rel_path = os.path.join('images/profiles', filename)
         
@@ -120,18 +231,15 @@ class DataProcessor:
 
     def download_post_image(self, post_id, display_url, save_dir='app/static/images/posts'):
         """Download post image using post ID as the filename"""
-        if not display_url or pd.isna(display_url) or not post_id:
-            print(f"No display URL or post ID for post")
+        if not display_url or pd.isna(display_url):
+            print(f"No display URL for post {post_id}")
             return None
         
         # Create posts directory if it doesn't exist
         os.makedirs(save_dir, exist_ok=True)
         
-        # Sanitize post_id to use as filename (remove special characters)
-        safe_id = str(post_id).replace('/', '_').replace(':', '_').replace(' ', '_')
-        
         # Use post ID as the filename
-        filename = f"{safe_id}.jpg"
+        filename = f"{post_id}.jpg"
         local_path = os.path.join(save_dir, filename)
         rel_path = os.path.join('images/posts', filename)
         
@@ -224,12 +332,8 @@ class DataProcessor:
                         if isinstance(val, np.ndarray):
                             print(f"Warning: {col} is an ndarray with shape {val.shape}")
                     
-                    # Get profile ID if available
-                    profile_id = group['id'].iloc[0] if 'id' in group.columns else None
-                    
                     influencer = {
                         'username': username,
-                        'id': profile_id,  # Store profile ID for image caching
                         'country': self.countries.get(username, ''),
                         'full_name': group['fullName'].iloc[0],
                         'biography': group['biography'].iloc[0],
@@ -253,13 +357,9 @@ class DataProcessor:
                     traceback.print_exc()
                     continue
                 
-                # Download profile picture using profile ID if available
+                # Download profile picture
                 if pd.notna(influencer['profile_pic_url']):
-                    influencer['profile_pic_local'] = self.download_profile_image(
-                        username, 
-                        influencer['profile_pic_url'],
-                        profile_id=influencer.get('id')  # Use profile ID if available
-                    )
+                    influencer['profile_pic_local'] = self.download_profile_image(username, influencer['profile_pic_url'])
                     print(f"Downloaded profile picture for {username}: {influencer['profile_pic_local']}")
                 else:
                     influencer['profile_pic_local'] = None
@@ -273,21 +373,59 @@ class DataProcessor:
                 
                 print(f"Processing {len(group)} posts for {username}")
                 for idx, (_, post) in enumerate(group.iterrows()):
-                    # Extract caption and hashtags
+                    if idx % 20 == 0:
+                        print(f"Processing post {idx+1}/{len(group)} for {username}")
+                    
+                    # Combine all captions for LLM analysis
+                    if pd.notna(post.get('caption')):
+                        all_captions.append(post['caption'])
+                    
+                    # SAFELY process hashtags - NO ambiguous truth value checks
                     try:
-                        caption = post.get('caption', '')
-                        if isinstance(caption, str) and caption.strip():
-                            all_captions.append(caption)
-                            
-                            # Extract hashtags
-                            hashtags = [tag.strip('#') for tag in caption.split() if tag.startswith('#')]
-                            all_hashtags.extend(hashtags)
-                            
-                            # Extract mentions
-                            mentions = [mention.strip('@') for mention in caption.split() if mention.startswith('@')]
-                            all_mentions.extend(mentions)
+                        hashtags = post.get('hashtags')
+                        # Only proceed if hashtags exists
+                        if hashtags is not None:
+                            # Handle different data types without any ambiguous truth checks
+                            if isinstance(hashtags, list):
+                                all_hashtags.extend(hashtags)
+                            elif isinstance(hashtags, np.ndarray):
+                                if hashtags.size == 1:
+                                    # Single item array - extract and use if it's a list
+                                    item = hashtags.item()
+                                    if isinstance(item, list):
+                                        all_hashtags.extend(item)
+                                    else:
+                                        # If a single non-list item, add directly
+                                        all_hashtags.append(item)
+                                elif hashtags.size > 1:
+                                    # Multi-item array - convert to list
+                                    all_hashtags.extend(hashtags.tolist())
                     except Exception as e:
-                        print(f"Error extracting caption and hashtags for post {idx}: {str(e)}")
+                        print(f"Error processing hashtags for post {idx}: {str(e)}")
+                        traceback.print_exc()
+                    
+                    # SAFELY process mentions - NO ambiguous truth value checks
+                    try:
+                        mentions = post.get('mentions')
+                        # Only proceed if mentions exists
+                        if mentions is not None:
+                            # Handle different data types without any ambiguous truth checks
+                            if isinstance(mentions, list):
+                                all_mentions.extend(mentions)
+                            elif isinstance(mentions, np.ndarray):
+                                if mentions.size == 1:
+                                    # Single item array - extract and use if it's a list
+                                    item = mentions.item()
+                                    if isinstance(item, list):
+                                        all_mentions.extend(item)
+                                    else:
+                                        # If a single non-list item, add directly
+                                        all_mentions.append(item)
+                                elif mentions.size > 1:
+                                    # Multi-item array - convert to list
+                                    all_mentions.extend(mentions.tolist())
+                    except Exception as e:
+                        print(f"Error processing mentions for post {idx}: {str(e)}")
                         traceback.print_exc()
                     
                     # Calculate engagement rate
@@ -358,9 +496,9 @@ class DataProcessor:
                             
                             # Only download the first 5 post images to conserve resources
                             if len(posts) < 5:
-                                # Get post ID safely - use the actual ID from the data if available
+                                # Get post ID safely
                                 post_id = post.get('id', f"{username}_{idx}")
-                                # Download the post image using the post ID
+                                # Download the post image
                                 post_image_local = self.download_post_image(post_id, post.get('displayUrl'))
                             else:
                                 post_image_local = None
@@ -392,84 +530,123 @@ class DataProcessor:
                 mention_counts = Counter(all_mentions)
                 influencer['top_mentions'] = dict(mention_counts.most_common(10))
                 
-                # Calculate engagement statistics
-                if engagement_data:
-                    try:
-                        # Convert to DataFrame for easier analysis
+                # Engagement analysis
+                try:
+                    if engagement_data:
+                        print(f"Processing engagement data for {username}: {len(engagement_data)} data points")
+                        # Convert to DataFrame for easier manipulation
                         engagement_df = pd.DataFrame(engagement_data)
+                        print(f"Engagement DataFrame columns: {engagement_df.columns.tolist()}")
                         
-                        # Store per-post engagement data
-                        post_dates = [d['date'].strftime('%Y-%m-%d') for d in engagement_data]
-                        rates = [d['engagement_rate'] for d in engagement_data]
-                        likes = [d['likes'] for d in engagement_data]
-                        comments = [d['comments'] for d in engagement_data]
+                        # Ensure date column is datetime type and sort
+                        engagement_df['date'] = pd.to_datetime(engagement_df['date'])
+                        engagement_df = engagement_df.sort_values('date')
                         
+                        # Create a formatted version of the dates for display
+                        engagement_df['date_str'] = engagement_df['date'].dt.strftime('%Y-%m-%d')
+                        
+                        # Handle NaN values in numeric columns
+                        engagement_df['engagement_rate'] = engagement_df['engagement_rate'].fillna(0)
+                        engagement_df['likes'] = engagement_df['likes'].fillna(0)
+                        engagement_df['comments'] = engagement_df['comments'].fillna(0)
+                        
+                        # Basic daily engagement (post by post)
                         influencer['post_engagement'] = {
-                            'dates': post_dates,
-                            'rates': rates,
-                            'likes': likes,
-                            'comments': comments
+                            'dates': engagement_df['date_str'].tolist(),
+                            'rates': engagement_df['engagement_rate'].tolist(),
+                            'engagement_rate': engagement_df['engagement_rate'].tolist(),  # Add for frontend compatibility
+                            'likes': engagement_df['likes'].tolist(),
+                            'comments': engagement_df['comments'].tolist()
                         }
                         
-                        # Calculate average engagement rate
-                        influencer['avg_engagement_rate'] = np.mean(rates)
-                        
-                        # Weekly trends (resample by week)
-                        engagement_df['date'] = pd.to_datetime(engagement_df['date'])
-                        engagement_df.set_index('date', inplace=True)
-                        weekly = engagement_df.resample('W').mean().reset_index()
-                        
-                        if not weekly.empty:
+                        # Weekly engagement
+                        if len(engagement_df) > 1:  # Only aggregate if we have more than one data point
+                            # Set up numeric-only DataFrame for resampling
+                            numeric_df = engagement_df.set_index('date')
+                            numeric_cols = ['engagement_rate', 'likes', 'comments']
+                            
+                            # Weekly - keep only numeric columns for resampling
+                            weekly_data = numeric_df[numeric_cols].resample('W').mean()
+                            weekly_data.reset_index(inplace=True)
+                            weekly_data['date_str'] = weekly_data['date'].dt.strftime('%Y-%m-%d')
+                            
+                            # Handle NaN values in resampled data
+                            weekly_data = weekly_data.fillna(0)
+                            
                             influencer['weekly_engagement'] = {
-                                'dates': [d.strftime('%Y-%m-%d') for d in weekly['date']],
-                                'rates': weekly['engagement_rate'].tolist(),
-                                'likes': weekly['likes'].tolist(),
-                                'comments': weekly['comments'].tolist()
+                                'dates': weekly_data['date_str'].tolist(),
+                                'rates': weekly_data['engagement_rate'].tolist(),
+                                'engagement_rate': weekly_data['engagement_rate'].tolist(),  # Add for frontend compatibility
+                                'likes': weekly_data['likes'].tolist(),
+                                'comments': weekly_data['comments'].tolist()
                             }
-                        
-                        # Monthly trends
-                        monthly = engagement_df.resample('M').mean().reset_index()
-                        
-                        if not monthly.empty:
+                            
+                            # Monthly engagement
+                            monthly_data = numeric_df[numeric_cols].resample('M').mean()
+                            monthly_data.reset_index(inplace=True)
+                            monthly_data['date_str'] = monthly_data['date'].dt.strftime('%Y-%m-%d')
+                            
+                            # Handle NaN values in monthly data
+                            monthly_data = monthly_data.fillna(0)
+                            
                             influencer['monthly_engagement'] = {
-                                'dates': [d.strftime('%Y-%m-%d') for d in monthly['date']],
-                                'rates': monthly['engagement_rate'].tolist(),
-                                'likes': monthly['likes'].tolist(),
-                                'comments': monthly['comments'].tolist()
+                                'dates': monthly_data['date_str'].tolist(),
+                                'rates': monthly_data['engagement_rate'].tolist(),
+                                'engagement_rate': monthly_data['engagement_rate'].tolist(),  # Add for frontend compatibility
+                                'likes': monthly_data['likes'].tolist(),
+                                'comments': monthly_data['comments'].tolist()
                             }
-                        
-                        # Quarterly trends
-                        quarterly = engagement_df.resample('Q').mean().reset_index()
-                        
-                        if not quarterly.empty:
+                            
+                            # Quarterly engagement
+                            quarterly_data = numeric_df[numeric_cols].resample('Q').mean()
+                            quarterly_data.reset_index(inplace=True)
+                            quarterly_data['date_str'] = quarterly_data['date'].dt.strftime('%Y-%m-%d')
+                            
+                            # Handle NaN values in quarterly data
+                            quarterly_data = quarterly_data.fillna(0)
+                            
                             influencer['quarterly_engagement'] = {
-                                'dates': [d.strftime('%Y-%m-%d') for d in quarterly['date']],
-                                'rates': quarterly['engagement_rate'].tolist(),
-                                'likes': quarterly['likes'].tolist(),
-                                'comments': quarterly['comments'].tolist()
+                                'dates': quarterly_data['date_str'].tolist(),
+                                'rates': quarterly_data['engagement_rate'].tolist(),
+                                'engagement_rate': quarterly_data['engagement_rate'].tolist(),  # Add for frontend compatibility
+                                'likes': quarterly_data['likes'].tolist(),
+                                'comments': quarterly_data['comments'].tolist()
                             }
-                    except Exception as e:
-                        print(f"Error calculating engagement statistics for {username}: {str(e)}")
-                        traceback.print_exc()
-                else:
-                    print(f"No engagement data for {username}")
+                        else:
+                            # If there's just one post, use the same data for all timeframes
+                            influencer['weekly_engagement'] = influencer['post_engagement']
+                            influencer['monthly_engagement'] = influencer['post_engagement']
+                            influencer['quarterly_engagement'] = influencer['post_engagement']
+                        
+                        # Overall engagement stats
+                        influencer['avg_engagement_rate'] = float(engagement_df['engagement_rate'].mean())
+                        influencer['max_engagement_rate'] = float(engagement_df['engagement_rate'].max())
+                        influencer['avg_likes'] = float(engagement_df['likes'].mean())
+                        influencer['avg_comments'] = float(engagement_df['comments'].mean())
+                except Exception as e:
+                    print(f"Error in engagement analysis for {username}: {str(e)}")
+                    traceback.print_exc()
+                    # Set fallback values in case of error
+                    influencer['post_engagement'] = {'dates': [], 'rates': [], 'engagement_rate': [], 'likes': [], 'comments': []}
+                    influencer['weekly_engagement'] = {'dates': [], 'rates': [], 'engagement_rate': [], 'likes': [], 'comments': []}
+                    influencer['monthly_engagement'] = {'dates': [], 'rates': [], 'engagement_rate': [], 'likes': [], 'comments': []}
+                    influencer['quarterly_engagement'] = {'dates': [], 'rates': [], 'engagement_rate': [], 'likes': [], 'comments': []}
                 
-                # Store the processed influencer data
                 influencers[username] = influencer
+                print(f"Completed processing for {username}")
             
-            # Save to global variable
-            self.influencers_data = influencers
-            print(f"Processed {len(influencers)} influencers successfully")
-            
-            # Save processed data for persistence
-            self.save_processed_data()
-            
-            return influencers
-        
         except Exception as e:
             print(f"Error in process_influencer_data: {str(e)}")
             traceback.print_exc()
-            raise Exception(f"Error processing influencer data: {str(e)}")
+            raise Exception(f"Error processing data: {str(e)}")
+        
+        self.influencers_data = influencers
+        print(f"Processed {len(influencers)} influencers successfully")
+
+        # Save the processed data
+        self._save_persistent_data()
+
+        return influencers
     
     def analyze_with_llm(self, openai_api_key):
         """Analyze influencer content using OpenAI LLM"""
@@ -615,76 +792,4 @@ class DataProcessor:
         except Exception as e:
             print(f"Error generating word cloud: {str(e)}")
             traceback.print_exc()
-            return None
-
-    # Add new methods for persistence
-    def save_processed_data(self):
-        """Save the processed data to a file for persistence"""
-        try:
-            # Create data directory if it doesn't exist
-            os.makedirs(self.data_folder, exist_ok=True)
-            
-            # Prepare data for saving - don't include pandas dataframes as they're large
-            data_to_save = {
-                'influencers_data': self.influencers_data,
-                'countries': self.countries,
-                'timestamp': datetime.datetime.now().isoformat()
-            }
-            
-            # Save to file
-            with open(self.persistence_file, 'wb') as f:
-                pickle.dump(data_to_save, f)
-            
-            print(f"Saved processed data to {self.persistence_file}")
-            return True
-        except Exception as e:
-            print(f"Error saving processed data: {str(e)}")
-            traceback.print_exc()
-            return False
-    
-    def load_processed_data(self):
-        """Load previously processed data if available"""
-        try:
-            if os.path.exists(self.persistence_file):
-                with open(self.persistence_file, 'rb') as f:
-                    data = pickle.load(f)
-                
-                # Restore data
-                self.influencers_data = data.get('influencers_data', {})
-                self.countries = data.get('countries', {})
-                
-                timestamp = data.get('timestamp', None)
-                if timestamp:
-                    print(f"Loaded processed data from {timestamp}")
-                
-                print(f"Loaded {len(self.influencers_data)} influencers from saved data")
-                return True
-            else:
-                print("No saved processed data found")
-                return False
-        except Exception as e:
-            print(f"Error loading processed data: {str(e)}")
-            traceback.print_exc()
-            return False
-    
-    def clear_processed_data(self):
-        """Clear all processed data and remove persistence file"""
-        try:
-            # Clear in-memory data
-            self.profile_data = None
-            self.posts_data = None
-            self.merged_data = None
-            self.influencers_data = {}
-            self.countries = {}
-            
-            # Remove persistence file if it exists
-            if os.path.exists(self.persistence_file):
-                os.remove(self.persistence_file)
-                print(f"Removed persistence file: {self.persistence_file}")
-            
-            print("Cleared all processed data")
-            return True
-        except Exception as e:
-            print(f"Error clearing processed data: {str(e)}")
-            traceback.print_exc()
-            return False 
+            return None 
