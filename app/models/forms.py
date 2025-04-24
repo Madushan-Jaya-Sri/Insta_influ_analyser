@@ -55,26 +55,26 @@ class LoginForm(FlaskForm):
     password = PasswordField('Password', validators=[
         DataRequired(message='Please enter your password')
     ])
-    remember_me = BooleanField('Remember me')
-    submit = SubmitField('Sign In')
+    remember_me = BooleanField('Keep me logged in')
+    submit = SubmitField('Sign In to Analyzer')
 
 class RegistrationForm(FlaskForm):
     """Form for user registration"""
-    username = StringField('Username', validators=[
+    username = StringField('Create a Username', validators=[
         DataRequired(message='Please enter a username'),
         Length(min=3, max=30, message='Username must be between 3 and 30 characters'),
         Regexp('^[A-Za-z0-9_]+$', message='Username can only contain letters, numbers, and underscores')
     ])
-    email = StringField('Email', validators=[
+    email = StringField('Email Address', validators=[
         DataRequired(message='Please enter your email'),
         Email(message='Please enter a valid email address')
     ])
-    password = PasswordField('Password', validators=[
+    password = PasswordField('Create a Password', validators=[
         DataRequired(message='Please enter a password'),
         Length(min=8, message='Password must be at least 8 characters')
     ])
-    confirm_password = PasswordField('Confirm Password', validators=[
+    confirm_password = PasswordField('Confirm Your Password', validators=[
         DataRequired(message='Please confirm your password'),
         EqualTo('password', message='Passwords must match')
     ])
-    submit = SubmitField('Register') 
+    submit = SubmitField('Create Account') 
