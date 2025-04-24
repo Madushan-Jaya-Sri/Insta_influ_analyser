@@ -18,6 +18,8 @@ services:
       start_period: 40s
     networks:
       - app_network
+    environment:
+      - PYTHONUNBUFFERED=1  # Ensure logs are immediately visible
 
   nginx:
     image: nginx:1.23-alpine
@@ -34,6 +36,11 @@ services:
 
 volumes:
   app_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/app_data  # This will mount to a local directory
   app_uploads:
   app_static:
 

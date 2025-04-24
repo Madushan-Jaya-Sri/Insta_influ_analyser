@@ -10,5 +10,11 @@
         "username": "Jayasri",
         "email": "madushanjayaz10@gmail.com",
         "password_hash": "scrypt:32768:8:1$FiwmEt81qaJoox9Z$e232ec8c807b710a3bcdeb2a9b3449916f16f9acdfd3bab64a2e7b5893d27c6774b9079aaadcfcd5830d6999bcbc255499e5ac887acaab1dc1cc47a3e8ea44a6"
+    },
+    {
+        "id": "a1ed3eaa-31eb-490f-a08e-3352b2657031",
+        "username": "madush",
+        "email": "mohamed.thareef@momentro.com",
+        "password_hash": "scrypt:32768:8:1$0vSOSMatfVXkUeWu$19ff31418b94b7a3d4c46b5a0a40a81d5dfc8b23159a643c16366a713232f3d49b65acd720dacec6074db461d1b5e9994febf36e14b91e00457cfb92213da0b3"
     }
 ]

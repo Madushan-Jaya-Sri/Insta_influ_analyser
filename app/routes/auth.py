@@ -3,9 +3,11 @@ from flask import (
     flash, session, current_app, jsonify
 )
 from flask_login import login_user, logout_user, login_required, current_user
+import os
+import json
 
 from app.models.forms import LoginForm, RegistrationForm
-from app.models.user import User
+from app.models.user import User, USERS_DATA_PATH
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
@@ -77,4 +79,51 @@ def register():
 def logout():
     logout_user()
     flash('You have been logged out.', 'info')
-    return redirect(url_for('main.index')) 
+    return redirect(url_for('main.index'))
+
+@auth_bp.route('/debug')
+def debug_users():
+    """Debug endpoint to check user data (REMOVE IN PRODUCTION)"""
+    try:
+        # Force reload users from file
+        User.load_users()
+        
+        # Check if file exists
+        file_exists = os.path.exists(USERS_DATA_PATH)
+        
+        # Get file stats if it exists
+        file_stats = None
+        if file_exists:
+            file_stats = {
+                'size': os.path.getsize(USERS_DATA_PATH),
+                'mod_time': os.path.getmtime(USERS_DATA_PATH),
+                'permissions': oct(os.stat(USERS_DATA_PATH).st_mode)[-3:]
+            }
+        
+        # Read file content if it exists
+        file_content = None
+        if file_exists:
+            try:
+                with open(USERS_DATA_PATH, 'r') as f:
+                    file_content = json.load(f)
+            except json.JSONDecodeError:
+                file_content = "Invalid JSON format"
+        
+        # Get data from memory
+        memory_users = {uid: {'username': user.username, 'email': user.email} 
+                      for uid, user in User._users.items()}
+        
+        return jsonify({
+            'file_path': USERS_DATA_PATH,
+            'file_exists': file_exists,
+            'file_stats': file_stats,
+            'file_content': file_content,
+            'memory_users': memory_users,
+            'user_count': len(User._users),
+            'data_dir_contents': os.listdir(os.path.dirname(USERS_DATA_PATH)) if os.path.exists(os.path.dirname(USERS_DATA_PATH)) else 'Directory not found'
+        })
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'users_data_path': USERS_DATA_PATH
+        }) 
