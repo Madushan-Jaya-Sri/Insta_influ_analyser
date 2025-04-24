@@ -28,7 +28,9 @@ def login():
         if user:
             # Login the user
             login_user(user, remember=remember)
-            flash('Login successful!', 'success')
+            
+            # Provide more informative welcome message with guidance to services
+            flash(f'Welcome back, {user.username}! You now have full access to all Instagram Analyzer features including dashboard, data analysis, and history tracking.', 'success')
             
             # Redirect to the page requested before login, or dashboard if none
             next_page = request.args.get('next')
@@ -59,7 +61,11 @@ def register():
             
             # Log the user in
             login_user(user)
-            flash('Your account has been created!', 'success')
+            
+            # Enhanced welcome message with guidance
+            flash(f'Welcome to Instagram Analyzer, {user.username}! Your account has been created successfully. You now have full access to analyze influencers, track engagement metrics, and save your analysis history.', 'success')
+            
+            # Redirect to dashboard
             return redirect(url_for('main.dashboard'))
         except ValueError as e:
             flash(str(e), 'danger')

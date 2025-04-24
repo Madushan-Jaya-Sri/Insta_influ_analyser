@@ -9,6 +9,50 @@
         <p class="lead">Analyzing {{ influencers|length }} influencers across {{ influencers.values()|map(attribute='country')|unique|list|length }} countries</p>
     </div>
 
+    <!-- Services Navigation Panel -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card" style="border-left: 4px solid #833AB4;">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">
+                        <i class="fas fa-magic me-2" style="color: #833AB4;"></i>Instagram Analyzer Services
+                    </h5>
+                    <p class="text-muted">Access all services available in your account:</p>
+                    <div class="row mt-3">
+                        <div class="col-md-3 col-sm-6 mb-3">
+                            <a href="{{ url_for('main.index') }}" class="btn btn-light w-100 text-start p-3 h-100">
+                                <i class="fas fa-search fa-lg d-block mb-2" style="color: #833AB4;"></i>
+                                <strong>Analyze New Profiles</strong>
+                                <small class="d-block text-muted">Start a fresh analysis</small>
+                            </a>
+                        </div>
+                        <div class="col-md-3 col-sm-6 mb-3">
+                            <a href="{{ url_for('main.upload_files') }}" class="btn btn-light w-100 text-start p-3 h-100">
+                                <i class="fas fa-upload fa-lg d-block mb-2" style="color: #E1306C;"></i>
+                                <strong>Upload JSON Data</strong>
+                                <small class="d-block text-muted">Use your own data files</small>
+                            </a>
+                        </div>
+                        <div class="col-md-3 col-sm-6 mb-3">
+                            <a href="{{ url_for('main.history') }}" class="btn btn-light w-100 text-start p-3 h-100">
+                                <i class="fas fa-history fa-lg d-block mb-2" style="color: #FCAF45;"></i>
+                                <strong>Analysis History</strong>
+                                <small class="d-block text-muted">View saved analyses</small>
+                            </a>
+                        </div>
+                        <div class="col-md-3 col-sm-6 mb-3">
+                            <button type="button" id="clearDataBtn" class="btn btn-light w-100 text-start p-3 h-100">
+                                <i class="fas fa-trash fa-lg d-block mb-2" style="color: #FD1D1D;"></i>
+                                <strong>Clear All Data</strong>
+                                <small class="d-block text-muted">Reset your workspace</small>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Country filter -->
     <div class="row mb-4">
         <div class="col-md-12">
@@ -119,8 +163,6 @@
             </div>
         {% endfor %}
     </div>
-
-    <button id="clearDataButton" class="btn btn-danger">Clear All Data</button>
 </div>
 {% endblock %}
 
@@ -151,29 +193,57 @@
                 });
             });
         });
-    });
 
-    document.getElementById('clearDataButton').addEventListener('click', function() {
-        // Add confirmation dialog
-        if (confirm('Are you sure you want to delete ALL application data, including images? This action cannot be undone.')) {
-            fetch('/clear-data', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('All data and images cleared successfully.');
-                        location.reload();
-                    } else {
-                        alert('Failed to clear data.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error clearing data:', error);
-                    alert('An error occurred while clearing data.');
-                });
-        } else {
-            // User clicked Cancel
-            console.log('Clear data operation cancelled by user.');
-        }
+        // Clear Data button functionality
+        document.getElementById('clearDataBtn').addEventListener('click', function() {
+            // Add confirmation dialog
+            if (confirm('Are you sure you want to delete ALL application data, including images? This action cannot be undone.')) {
+                fetch('/clear-data', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('All data and images cleared successfully.');
+                            location.reload();
+                        } else {
+                            alert('Failed to clear data.');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error clearing data:', error);
+                        alert('An error occurred while clearing data.');
+                    });
+            } else {
+                // User clicked Cancel
+                console.log('Clear data operation cancelled by user.');
+            }
+        });
     });
 </script>
+
+<style>
+    .interest-tag {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        margin-right: 0.3rem;
+        margin-bottom: 0.3rem;
+        font-size: 0.8rem;
+    }
+    
+    .profile-pic-sm {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+    
+    /* Instagram gradient for buttons on hover */
+    .btn-light:hover {
+        background-color: #f8f9fa;
+        transform: translateY(-3px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+</style>
 {% endblock %} 
