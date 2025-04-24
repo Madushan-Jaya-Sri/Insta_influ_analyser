@@ -13,23 +13,50 @@ from io import BytesIO
 from collections import defaultdict, Counter
 import requests
 import shutil # Added for clear_data potential image deletion
+import uuid # For unique run IDs
 
 # Define the path for the data file relative to the script's location
 # This assumes run.py is in the root and calls create_app which sets up paths
 # A more robust way might involve passing the data path from the app config
 APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_DATA_PATH = os.path.join(APP_ROOT, 'data', 'influencers.json')
+DEFAULT_DATA_DIR = os.path.join(APP_ROOT, 'data')
 DEFAULT_IMAGES_PATH = os.path.join(APP_ROOT, 'static', 'images')
 
+
 class DataProcessor:
-    def __init__(self, data_file_path=DEFAULT_DATA_PATH):
+    def __init__(self, user_id=None, data_dir=DEFAULT_DATA_DIR):
         self.profile_data = None
         self.posts_data = None
         self.merged_data = None
         self.influencers_data = {}
         self.countries = {}
-        self.data_file_path = data_file_path
-        self._load_persistent_data() # Load existing data on initialization
+        self.data_dir = data_dir
+        self.user_id = user_id
+        
+        # Create user-specific data directory if a user_id is provided
+        if user_id:
+            self.user_data_dir = os.path.join(self.data_dir, f'user_{user_id}')
+            os.makedirs(self.user_data_dir, exist_ok=True)
+            self.data_file_path = os.path.join(self.user_data_dir, 'influencers.json')
+            
+            # Create user-specific image directory
+            self.user_images_dir = os.path.join(DEFAULT_IMAGES_PATH, f'user_{user_id}')
+            os.makedirs(os.path.join(self.user_images_dir, 'profiles'), exist_ok=True)
+            os.makedirs(os.path.join(self.user_images_dir, 'posts'), exist_ok=True)
+            os.makedirs(os.path.join(self.user_images_dir, 'misc'), exist_ok=True)
+        else:
+            # Fallback to global data file for backward compatibility
+            self.data_file_path = os.path.join(self.data_dir, 'influencers.json')
+            self.user_data_dir = self.data_dir
+            self.user_images_dir = DEFAULT_IMAGES_PATH
+            
+        self._load_persistent_data()
+        
+    def _get_runs_dir(self):
+        """Get the directory for storing run history"""
+        runs_dir = os.path.join(self.user_data_dir, 'runs')
+        os.makedirs(runs_dir, exist_ok=True)
+        return runs_dir
     
     def _load_persistent_data(self):
         """Load data from the persistent JSON file if it exists."""
@@ -58,10 +85,126 @@ class DataProcessor:
                 # Use custom default handler for non-serializable types if needed
                 json.dump(self.influencers_data, f, indent=4, default=self._json_serializer)
             print(f"Saved {len(self.influencers_data)} influencers to {self.data_file_path}")
+            
+            # Also save this as a new run in the history
+            self._save_run()
         except Exception as e:
             print(f"Error saving persistent data to {self.data_file_path}: {e}")
             traceback.print_exc()
     
+    def _save_run(self):
+        """Save the current analysis as a history entry"""
+        if not self.user_id or not self.influencers_data:
+            return
+            
+        try:
+            # Create a run ID and timestamp
+            run_id = str(uuid.uuid4())
+            timestamp = datetime.datetime.now().isoformat()
+            
+            # Extract summary information for the run
+            influencer_count = len(self.influencers_data)
+            influencer_names = list(self.influencers_data.keys())
+            countries = list(set(data.get('country', '') for data in self.influencers_data.values()))
+            
+            # Create the run data
+            run_data = {
+                'run_id': run_id,
+                'timestamp': timestamp,
+                'influencer_count': influencer_count,
+                'influencers': influencer_names,
+                'countries': countries,
+                'snapshot': self.influencers_data  # Store full data for historical reference
+            }
+            
+            # Save to a run-specific file
+            runs_dir = self._get_runs_dir()
+            run_file = os.path.join(runs_dir, f"{run_id}.json")
+            
+            with open(run_file, 'w', encoding='utf-8') as f:
+                json.dump(run_data, f, indent=4, default=self._json_serializer)
+                
+            # Also update the runs index file
+            self._update_runs_index(run_id, timestamp, influencer_count, influencer_names, countries)
+            
+        except Exception as e:
+            print(f"Error saving run history: {e}")
+            traceback.print_exc()
+    
+    def _update_runs_index(self, run_id, timestamp, influencer_count, influencers, countries):
+        """Update the index of all runs"""
+        index_file = os.path.join(self._get_runs_dir(), "index.json")
+        runs_index = []
+        
+        # Load existing index if it exists
+        if os.path.exists(index_file):
+            try:
+                with open(index_file, 'r', encoding='utf-8') as f:
+                    runs_index = json.load(f)
+            except Exception as e:
+                print(f"Error loading runs index: {e}")
+                runs_index = []
+        
+        # Add the new run to the index
+        runs_index.append({
+            'run_id': run_id,
+            'timestamp': timestamp,
+            'influencer_count': influencer_count,
+            'influencers': influencers[:5] + ['...'] if len(influencers) > 5 else influencers,  # Limit displayed influencers
+            'countries': countries
+        })
+        
+        # Sort by timestamp (newest first)
+        runs_index.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        # Save the updated index
+        with open(index_file, 'w', encoding='utf-8') as f:
+            json.dump(runs_index, f, indent=4)
+            
+    def get_runs_history(self):
+        """Get the history of analysis runs"""
+        index_file = os.path.join(self._get_runs_dir(), "index.json")
+        if not os.path.exists(index_file):
+            return []
+            
+        try:
+            with open(index_file, 'r', encoding='utf-8') as f:
+                runs_index = json.load(f)
+                
+            # Convert ISO timestamps to formatted dates
+            for run in runs_index:
+                timestamp = datetime.datetime.fromisoformat(run['timestamp'])
+                run['formatted_date'] = timestamp.strftime('%B %d, %Y %I:%M %p')
+                
+            return runs_index
+        except Exception as e:
+            print(f"Error loading runs history: {e}")
+            return []
+            
+    def load_run(self, run_id):
+        """Load a specific historical run"""
+        if not self.user_id:
+            return False
+            
+        run_file = os.path.join(self._get_runs_dir(), f"{run_id}.json")
+        if not os.path.exists(run_file):
+            return False
+            
+        try:
+            with open(run_file, 'r', encoding='utf-8') as f:
+                run_data = json.load(f)
+                
+            # Load the snapshot data
+            self.influencers_data = run_data.get('snapshot', {})
+            # Rebuild countries mapping
+            self.countries = {username: data.get('country', '') 
+                             for username, data in self.influencers_data.items()}
+                             
+            return True
+        except Exception as e:
+            print(f"Error loading run {run_id}: {e}")
+            return False
+
     def _json_serializer(self, obj):
         """Custom JSON serializer for objects not serializable by default json code"""
         if isinstance(obj, (datetime.date, datetime.datetime)):
@@ -90,7 +233,7 @@ class DataProcessor:
         print(f"Warning: Cannot serialize type {type(obj)}: {obj}")
         return str(obj) # Fallback to string representation
 
-    def clear_all_data(self, clear_images=False, images_path=DEFAULT_IMAGES_PATH):
+    def clear_all_data(self, clear_images=False):
         """Clears persisted data and optionally images."""
         # Clear in-memory data
         self.profile_data = None
@@ -108,9 +251,10 @@ class DataProcessor:
                 print(f"Error deleting data file {self.data_file_path}: {e}")
 
         # Optionally clear images
-        if clear_images:
+        if clear_images and self.user_id:
+            user_images_path = self.user_images_dir
             for subdir in ['profiles', 'posts', 'misc']:
-                dir_to_clear = os.path.join(images_path, subdir)
+                dir_to_clear = os.path.join(user_images_path, subdir)
                 if os.path.exists(dir_to_clear):
                     try:
                         # Remove all files within the directory
@@ -119,8 +263,6 @@ class DataProcessor:
                             try:
                                 if os.path.isfile(file_path) or os.path.islink(file_path):
                                     os.unlink(file_path)
-                                # Optionally remove subdirectories if needed, but be careful
-                                # elif os.path.isdir(file_path): shutil.rmtree(file_path) 
                             except Exception as e:
                                 print(f'Failed to delete {file_path}. Reason: {e}')
                         print(f"Cleared image files in: {dir_to_clear}")
@@ -128,6 +270,7 @@ class DataProcessor:
                         print(f"Error clearing images in {dir_to_clear}: {e}")
         
         print("All data cleared.")
+
 
     def load_profile_data(self, file_path):
         """Load the Instagram profile data JSON file"""
@@ -194,19 +337,30 @@ class DataProcessor:
         self.countries[username] = country
         print(f"Set country for {username}: {country}")
     
-    def download_profile_image(self, username, profile_pic_url, save_dir='app/static/images/profiles'):
+    def download_profile_image(self, username, profile_pic_url):
         """Download profile image for a specific influencer using username as filename"""
         if not profile_pic_url or pd.isna(profile_pic_url):
             print(f"No profile picture URL for {username}")
             return None
         
+        # Use user-specific directory if user_id is set
+        if self.user_id:
+            save_dir = os.path.join(self.user_images_dir, 'profiles')
+        else:
+            save_dir = os.path.join(DEFAULT_IMAGES_PATH, 'profiles')
+            
         # Create profiles directory if it doesn't exist
         os.makedirs(save_dir, exist_ok=True)
         
         # Use username as the filename
         filename = f"{username}.jpg"
         local_path = os.path.join(save_dir, filename)
-        rel_path = os.path.join('images/profiles', filename)
+        
+        # Get the relative path for template usage
+        if self.user_id:
+            rel_path = os.path.join(f'images/user_{self.user_id}/profiles', filename)
+        else:
+            rel_path = os.path.join('images/profiles', filename)
         
         # Check if the profile image already exists
         if os.path.exists(local_path):
@@ -229,19 +383,30 @@ class DataProcessor:
             traceback.print_exc()
             return None
 
-    def download_post_image(self, post_id, display_url, save_dir='app/static/images/posts'):
+    def download_post_image(self, post_id, display_url):
         """Download post image using post ID as the filename"""
         if not display_url or pd.isna(display_url):
             print(f"No display URL for post {post_id}")
             return None
         
+        # Use user-specific directory if user_id is set
+        if self.user_id:
+            save_dir = os.path.join(self.user_images_dir, 'posts')
+        else:
+            save_dir = os.path.join(DEFAULT_IMAGES_PATH, 'posts')
+            
         # Create posts directory if it doesn't exist
         os.makedirs(save_dir, exist_ok=True)
         
         # Use post ID as the filename
         filename = f"{post_id}.jpg"
         local_path = os.path.join(save_dir, filename)
-        rel_path = os.path.join('images/posts', filename)
+        
+        # Get the relative path for template usage
+        if self.user_id:
+            rel_path = os.path.join(f'images/user_{self.user_id}/posts', filename)
+        else:
+            rel_path = os.path.join('images/posts', filename)
         
         # Check if the post image already exists
         if os.path.exists(local_path):

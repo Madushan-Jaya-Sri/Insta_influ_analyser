@@ -1,6 +1,7 @@
 import os
 import datetime
 from flask import Flask
+from flask_login import LoginManager
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -20,6 +21,18 @@ def create_app():
         if not os.path.exists(folder):
             os.makedirs(folder)
     
+    # Initialize Flask-Login
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = 'auth.login'
+    login_manager.login_message = 'Please log in to access this page.'
+    login_manager.login_message_category = 'warning'
+    
+    @login_manager.user_loader
+    def load_user(user_id):
+        from app.models.user import User
+        return User.get_by_id(user_id)
+    
     # Add template context processors
     @app.context_processor
     def inject_now():
@@ -33,6 +46,9 @@ def create_app():
     # Register blueprints
     from app.routes.main import main_bp
     app.register_blueprint(main_bp)
+    
+    from app.routes.auth import auth_bp
+    app.register_blueprint(auth_bp)
     
     return app
 

@@ -1,0 +1,14 @@
+[
+    {
+        "id": "2dcb82cb-e813-484f-b3bc-55ff37cfb447",
+        "username": "madushan",
+        "email": "madushanjayasri100@gmail.com",
+        "password_hash": "scrypt:32768:8:1$Qbnu3N8khWLUvQl6$ffd2ff650f54c52fb31576c8c893f3e312bd816964da9ca64b4dcf526877c76098d1a38379ac6eb5f6ef3c4b59c1d27fe9d5217a8c2ac90631f4b2ae07f414ae"
+    },
+    {
+        "id": "ad0a7636-c2a8-45b5-af4e-9c814961981a",
+        "username": "Jayasri",
+        "email": "madushanjayaz10@gmail.com",
+        "password_hash": "scrypt:32768:8:1$FiwmEt81qaJoox9Z$e232ec8c807b710a3bcdeb2a9b3449916f16f9acdfd3bab64a2e7b5893d27c6774b9079aaadcfcd5830d6999bcbc255499e5ac887acaab1dc1cc47a3e8ea44a6"
+    }
+]
