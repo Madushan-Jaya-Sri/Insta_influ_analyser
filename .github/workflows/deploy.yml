@@ -29,11 +29,11 @@ jobs:
 
     - name: Upload .env to EC2
       run: |
-        scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa .env ubuntu@13.203.105.218:/home/ubuntu/Insta_influ_analyser/.env
+        scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa .env ubuntu@13.126.220.175:/home/ubuntu/Insta_influ_analyser/.env
 
     - name: Deploy to EC2
       run: |
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@13.203.105.218 "
+        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@13.126.220.175 "
           mkdir -p /home/ubuntu/Insta_influ_analyser
           cd /home/ubuntu/Insta_influ_analyser
 
