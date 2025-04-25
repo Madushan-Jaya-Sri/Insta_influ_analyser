@@ -2,6 +2,7 @@ services:
   app:
     build: .
     restart: always
+    container_name: flask_app
     volumes:
       - ./docker_volumes/app_uploads:/app/uploads
       - ./docker_volumes/app_data:/app/data
@@ -16,6 +17,7 @@ services:
   nginx:
     image: nginx:1.25-alpine
     restart: always
+    container_name: nginx
     ports:
       - "80:80"
     volumes:
@@ -27,4 +29,5 @@ services:
       - app_network
 
 networks:
-  app_network: 
+  app_network:
+    driver: bridge 
