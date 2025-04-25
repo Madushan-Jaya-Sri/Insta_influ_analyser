@@ -17,6 +17,8 @@ jobs:
         echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts
+        # Add GitHub to known hosts
+        ssh-keyscan -H github.com >> ~/.ssh/known_hosts
 
     - name: Create .env file
       run: |
@@ -32,24 +34,34 @@ jobs:
     - name: Upload .env to EC2
       run: scp .env ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
 
-    - name: Setup repository on EC2
+    - name: Upload repository to EC2
       run: |
-        REPO_URL="https://github.com/madushan-jaya-sri/Insta_influ_analyser.git"
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser && \
-        if [ ! -d '.git' ]; then \
-          timestamp=\$(date +%Y%m%d%H%M%S) && \
-          mkdir -p ~/backups && \
-          if [ \"\$(ls -A)\" ]; then \
-            echo \"Backing up existing content to ~/backups/insta_influ_\$timestamp\" && \
-            mkdir -p ~/backups/insta_influ_\$timestamp && \
-            mv * ~/backups/insta_influ_\$timestamp/ 2>/dev/null || true && \
-            mv .* ~/backups/insta_influ_\$timestamp/ 2>/dev/null || true; \
-          fi && \
-          git clone ${REPO_URL} .; \
-        else \
-          git fetch --all && \
-          git reset --hard origin/main || git reset --hard origin/master; \
-        fi"
+        # Create an archive of the current repository
+        git archive --format=tar.gz -o repo.tar.gz HEAD
+        
+        # Upload the repository archive to EC2
+        scp repo.tar.gz ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
+        
+        # Extract the repository on the EC2 instance
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} << 'ENDSSH'
+        cd ~/Insta_influ_analyser
+        
+        # Backup existing content
+        timestamp=$(date +%Y%m%d%H%M%S)
+        mkdir -p ~/backups/insta_influ_$timestamp
+        
+        # Move all existing files to backup (except the new repo.tar.gz)
+        ls -A | grep -v "repo.tar.gz" | xargs -I{} mv {} ~/backups/insta_influ_$timestamp/ 2>/dev/null || true
+        
+        # Extract the repository archive
+        tar -xzf repo.tar.gz
+        
+        # Remove the archive
+        rm repo.tar.gz
+        
+        # Copy back the .env file
+        cp ~/backups/insta_influ_$timestamp/.env . 2>/dev/null || true
+        ENDSSH
 
     - name: Deploy to EC2
       run: |
@@ -81,4 +93,4 @@ jobs:
         ENDSSH
 
     - name: Clean up SSH keys
-      run: rm -rf ~/.ssh .env
+      run: rm -rf ~/.ssh .env repo.tar.gz
