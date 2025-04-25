@@ -26,8 +26,21 @@ jobs:
         echo "APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> .env
         echo "APIFY_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> .env
 
+    - name: Create directory on EC2
+      run: ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "mkdir -p ~/Insta_influ_analyser"
+
     - name: Upload .env to EC2
       run: scp .env ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
+
+    - name: Clone repository on EC2 if it doesn't exist
+      run: |
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} << 'ENDSSH'
+        cd ~/Insta_influ_analyser
+        if [ ! -d ".git" ]; then
+          # Clone the repository if it doesn't exist
+          git clone https://github.com/${{ github.repository }} .
+        fi
+        ENDSSH
 
     - name: Deploy to EC2
       run: |

@@ -13,6 +13,42 @@ This guide explains how to deploy the application to an EC2 instance using Docke
    - `APIFY_API_TOKEN`: Your Apify API token
    - `SECRET_KEY`: Application secret key
 
+## First-Time EC2 Setup
+
+Before the first deployment, you need to set up your EC2 instance:
+
+1. SSH into your EC2 instance:
+   ```
+   ssh -i your-key.pem ubuntu@13.126.220.175
+   ```
+
+2. Install Git if not already installed:
+   ```
+   sudo apt-get update
+   sudo apt-get install -y git
+   ```
+
+3. Set up SSH keys for GitHub (if using private repository):
+   ```
+   ssh-keygen -t ed25519 -C "your_email@example.com"
+   cat ~/.ssh/id_ed25519.pub
+   ```
+   
+   Then add this public key to your GitHub repository deploy keys.
+
+4. Install Docker and Docker Compose (you can upload and run the setup_ec2.sh script):
+   ```
+   sudo apt-get update
+   sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+   sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+   sudo apt-get update
+   sudo apt-get install -y docker-ce
+   sudo usermod -aG docker $USER
+   sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+   sudo chmod +x /usr/local/bin/docker-compose
+   ```
+
 ## Manual Deployment
 
 If you want to deploy manually instead of using GitHub Actions:
@@ -85,4 +121,12 @@ docker-compose -f docker-compose.prod.yml up -d
 
 ```
 docker exec -it insta_influ_analyser_nginx_1 nginx -t
-``` 
+```
+
+### GitHub Actions Deployment Fails
+
+If you see an error like `scp: dest open "Insta_influ_analyser/": Failure`:
+
+1. Manually SSH into your EC2 instance
+2. Create the directory: `mkdir -p ~/Insta_influ_analyser`
+3. Try the GitHub Actions deployment again 
