@@ -34,31 +34,22 @@ jobs:
 
     - name: Setup repository on EC2
       run: |
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} << 'ENDSSH'
-        cd ~/Insta_influ_analyser
-        
-        # Check if .git directory exists
-        if [ ! -d ".git" ]; then
-          # Directory exists but not a git repo - make backup and clean
-          timestamp=$(date +%Y%m%d%H%M%S)
-          mkdir -p ~/backups
-          
-          # Move existing content to backup if there are files
-          if [ "$(ls -A)" ]; then
-            echo "Backing up existing content to ~/backups/insta_influ_$timestamp"
-            mkdir -p ~/backups/insta_influ_$timestamp
-            mv * ~/backups/insta_influ_$timestamp/ 2>/dev/null || true
-            mv .* ~/backups/insta_influ_$timestamp/ 2>/dev/null || true
-          fi
-          
-          # Fresh clone
-          git clone https://github.com/$GITHUB_REPOSITORY .
-        else
-          # It's a git repo, just pull latest
-          git fetch --all
-          git reset --hard origin/main || git reset --hard origin/master
-        fi
-        ENDSSH
+        REPO_URL="https://github.com/madushan-jaya-sri/Insta_influ_analyser.git"
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser && \
+        if [ ! -d '.git' ]; then \
+          timestamp=\$(date +%Y%m%d%H%M%S) && \
+          mkdir -p ~/backups && \
+          if [ \"\$(ls -A)\" ]; then \
+            echo \"Backing up existing content to ~/backups/insta_influ_\$timestamp\" && \
+            mkdir -p ~/backups/insta_influ_\$timestamp && \
+            mv * ~/backups/insta_influ_\$timestamp/ 2>/dev/null || true && \
+            mv .* ~/backups/insta_influ_\$timestamp/ 2>/dev/null || true; \
+          fi && \
+          git clone ${REPO_URL} .; \
+        else \
+          git fetch --all && \
+          git reset --hard origin/main || git reset --hard origin/master; \
+        fi"
 
     - name: Deploy to EC2
       run: |
