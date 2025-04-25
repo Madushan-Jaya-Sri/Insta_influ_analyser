@@ -32,13 +32,31 @@ jobs:
     - name: Upload .env to EC2
       run: scp .env ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
 
-    - name: Clone repository on EC2 if it doesn't exist
+    - name: Setup repository on EC2
       run: |
         ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} << 'ENDSSH'
         cd ~/Insta_influ_analyser
+        
+        # Check if .git directory exists
         if [ ! -d ".git" ]; then
-          # Clone the repository if it doesn't exist
-          git clone https://github.com/${{ github.repository }} .
+          # Directory exists but not a git repo - make backup and clean
+          timestamp=$(date +%Y%m%d%H%M%S)
+          mkdir -p ~/backups
+          
+          # Move existing content to backup if there are files
+          if [ "$(ls -A)" ]; then
+            echo "Backing up existing content to ~/backups/insta_influ_$timestamp"
+            mkdir -p ~/backups/insta_influ_$timestamp
+            mv * ~/backups/insta_influ_$timestamp/ 2>/dev/null || true
+            mv .* ~/backups/insta_influ_$timestamp/ 2>/dev/null || true
+          fi
+          
+          # Fresh clone
+          git clone https://github.com/$GITHUB_REPOSITORY .
+        else
+          # It's a git repo, just pull latest
+          git fetch --all
+          git reset --hard origin/main || git reset --hard origin/master
         fi
         ENDSSH
 
@@ -46,9 +64,6 @@ jobs:
       run: |
         ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} << 'ENDSSH'
         cd ~/Insta_influ_analyser
-
-        # Pull the latest changes
-        git pull
 
         # Create necessary directories
         mkdir -p docker_volumes/app_data docker_volumes/app_uploads docker_volumes/app_static docker_volumes/app_sessions
