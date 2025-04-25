@@ -2,71 +2,64 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Set up SSH
       run: |
-        mkdir -p ~/.ssh/
+        mkdir -p ~/.ssh
         echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H 13.126.220.175 >> ~/.ssh/known_hosts
+        ssh-keyscan -H ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts
 
-    - name: Generate .env from secrets
+    - name: Create .env file
       run: |
         echo "FLASK_ENV=production" > .env
         echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
         echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
         echo "APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> .env
+        echo "APIFY_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> .env
 
     - name: Upload .env to EC2
-      run: |
-        scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa .env ubuntu@13.126.220.175:/home/ubuntu/Insta_influ_analyser/.env
+      run: scp .env ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
 
     - name: Deploy to EC2
       run: |
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@13.126.220.175 "
-          mkdir -p /home/ubuntu/Insta_influ_analyser
-          cd /home/ubuntu/Insta_influ_analyser
-          if [ ! -d \".git\" ]; then
-            git clone https://github.com/${{ github.repository }} .
-          else
-            git fetch --all
-            git reset --hard origin/main
-          fi
-          mkdir -p docker_volumes/app_data docker_volumes/app_uploads docker_volumes/app_static docker_volumes/app_sessions
-          chmod -R 755 docker_volumes
-          chown -R ubuntu:ubuntu docker_volumes
-          mkdir -p certbot/conf certbot/www
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} << 'ENDSSH'
+        cd ~/Insta_influ_analyser
 
-          # Install docker-compose if it's not available
-          if ! command -v docker-compose &> /dev/null; then
-            echo Installing docker-compose...
-            sudo curl -L \"https://github.com/docker/compose/releases/download/v2.24.2/docker-compose-\$(uname -s)-\$(uname -m)\" -o /usr/local/bin/docker-compose
-            sudo chmod +x /usr/local/bin/docker-compose
-          fi
+        # Pull the latest changes
+        git pull
 
-          # Use docker compose (v2) if available
-          if command -v docker compose &> /dev/null; then
-            docker compose -f docker-compose.prod.yml down
-            docker compose -f docker-compose.prod.yml build --no-cache
-            docker compose -f docker-compose.prod.yml up -d
-          else
-            docker-compose -f docker-compose.prod.yml down
-            docker-compose -f docker-compose.prod.yml build --no-cache
-            docker-compose -f docker-compose.prod.yml up -d
-          fi
+        # Create necessary directories
+        mkdir -p docker_volumes/app_data docker_volumes/app_uploads docker_volumes/app_static docker_volumes/app_sessions
+        chmod -R 755 docker_volumes
+        chown -R $USER:$USER docker_volumes
 
-          # Backup the .env
-          cp .env /home/ubuntu/.env.backup
-        "
+        # Install docker-compose if it's not available
+        if ! command -v docker-compose &> /dev/null; then
+          echo Installing docker-compose...
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+        fi
+
+        # Use docker compose (v2) if available
+        if command -v docker compose &> /dev/null; then
+          docker compose -f docker-compose.prod.yml down
+          docker compose -f docker-compose.prod.yml build --no-cache
+          docker compose -f docker-compose.prod.yml up -d
+        else
+          docker-compose -f docker-compose.prod.yml down
+          docker-compose -f docker-compose.prod.yml build --no-cache
+          docker-compose -f docker-compose.prod.yml up -d
+        fi
+        ENDSSH
 
     - name: Clean up SSH keys
       run: rm -rf ~/.ssh .env

@@ -1,21 +1,17 @@
 version: '3.8'
 
 services:
-  web:
+  app:
     build: .
     ports:
-      - "8000:8000"
+      - "5000:5000"
     volumes:
-      - ./app:/app/app
-      - ./app/uploads:/app/app/uploads
-      - ./app/data:/app/app/data
-      - ./app/static:/app/app/static
+      - .:/app
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+      - ./static:/app/static
     env_file:
       - .env
-    restart: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s 
+    environment:
+      - FLASK_ENV=development
+    command: flask run --host=0.0.0.0 

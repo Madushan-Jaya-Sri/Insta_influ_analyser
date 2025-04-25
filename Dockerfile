@@ -1,40 +1,31 @@
-FROM python:3.11-slim
+FROM python:3.9-slim
 
 WORKDIR /app
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Install additional dependencies for matplotlib and wordcloud
-# Also install debugging tools
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    g++ \
-    libffi-dev \
-    libfreetype6-dev \
-    curl \
-    nano \
-    procps \
-    && apt-get clean \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Create necessary directories with proper permissions
-# ... existing Dockerfile content ...
-RUN mkdir -p app/uploads app/data app/static/images/brand app/static/images/profiles app/static/images/posts app/data/sessions \
-    && chown -R nobody:nogroup app/data app/uploads app/static app/data/sessions \
-    && chmod -R 755 app/data app/uploads app/static app/data/sessions
+# Create necessary directories
+RUN mkdir -p uploads data static
 
-# Set environment variables
-ENV FLASK_APP=app.py
-ENV FLASK_ENV=production
+# Set permissions
+RUN chmod -R 777 uploads data static
+
+# Environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV FLASK_APP=run.py
+ENV FLASK_ENV=production
 
-# Expose port
-EXPOSE 8000
-
-# Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120", "--preload", "--log-level", "debug", "wsgi:app"] 
+# WSGI entry point
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "run:create_app()"] 

@@ -1,6 +1,7 @@
-# Git
+# Version control
 .git
 .gitignore
+.github
 
 # Python
 __pycache__/
@@ -20,18 +21,45 @@ lib64/
 parts/
 sdist/
 var/
-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 venv/
 .venv/
+ENV/
 
-# Development and IDE
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+docker-compose.prod.yml
+
+# Deployment scripts
+scripts/
+nginx/
+certbot/
+
+# Data and uploads (will be mounted as volumes)
+data/
+uploads/
+static/
+
+# IDE files
 .idea/
 .vscode/
 *.swp
 *.swo
+
+# Development and test files
+*.log
+*.sqlite
+tests/
+test_*
+.env
+.env.example
+README.md
+
+# Development and IDE
 .DS_Store
 
 # Application specific
