@@ -7,9 +7,9 @@ services:
       - .env
     restart: always
     volumes:
-      - app_static:/app/app/static
       - app_data:/app/app/data
       - app_uploads:/app/app/uploads
+      - app_static:/app/app/static
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000"]
       interval: 30s
@@ -26,7 +26,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf  # <- use HTTP-only config
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf  # Use HTTP-only config
       - app_static:/app/app/static:ro
     depends_on:
       - web
@@ -40,9 +40,19 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: ${PWD}/docker_volumes/app_data  # This will mount to a local directory
+      device: ${PWD}/docker_volumes/app_data
   app_uploads:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/app_uploads
   app_static:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/app_static
 
 networks:
   app_network:

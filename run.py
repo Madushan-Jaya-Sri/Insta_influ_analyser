@@ -11,6 +11,14 @@ def create_app():
     app = Flask(__name__, template_folder='app/templates', static_folder='app/static', static_url_path='/static')
     
     # Configure app
+    # In the create_app() function, add:
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_PERMANENT'] = True
+    app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=7)
+    app.config['SESSION_USE_SIGNER'] = True
+    app.config['SESSION_COOKIE_SECURE'] = os.getenv('FLASK_ENV') == 'production'
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-dev-key')
     app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app/uploads')
     app.config['DATA_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app/data')
