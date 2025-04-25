@@ -1,7 +1,8 @@
 import os
 import datetime
-from flask import Flask
+from flask import Flask, session, request
 from flask_login import LoginManager
+from flask_session import Session  # Add this import
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -11,21 +12,25 @@ def create_app():
     app = Flask(__name__, template_folder='app/templates', static_folder='app/static', static_url_path='/static')
     
     # Configure app
-    # In the create_app() function, add:
     app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_FILE_DIR'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app/data/sessions')
     app.config['SESSION_PERMANENT'] = True
     app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=7)
     app.config['SESSION_USE_SIGNER'] = True
     app.config['SESSION_COOKIE_SECURE'] = os.getenv('FLASK_ENV') == 'production'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['SESSION_COOKIE_PATH'] = '/'  # Ensure cookie is valid for all routes
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-dev-key')
     app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app/uploads')
     app.config['DATA_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app/data')
     app.config['IMAGES_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app/static/images')
     
+    # Initialize flask-session
+    Session(app)
+    
     # Ensure folders exist
-    for folder in [app.config['UPLOAD_FOLDER'], app.config['DATA_FOLDER'], app.config['IMAGES_FOLDER']]:
+    for folder in [app.config['UPLOAD_FOLDER'], app.config['DATA_FOLDER'], app.config['IMAGES_FOLDER'], app.config['SESSION_FILE_DIR']]:
         if not os.path.exists(folder):
             os.makedirs(folder)
     
@@ -51,6 +56,11 @@ def create_app():
     def min_filter(a, b):
         return min(a, b)
     
+    # Debugging: Log session data
+    @app.before_request
+    def log_session():
+        app.logger.debug("Session: %s, Cookies: %s", session, request.cookies)
+    
     # Register blueprints
     from app.routes.main import main_bp
     app.register_blueprint(main_bp)
@@ -62,4 +72,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True) 
+    app.run(debug=True)

@@ -23,8 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY . .
 
 # Create necessary directories with proper permissions
-RUN mkdir -p app/uploads app/data app/static/images/brand app/static/images/profiles app/static/images/posts \
-    && chmod -R 777 app/data app/uploads app/static/images
+# ... existing Dockerfile content ...
+RUN mkdir -p app/uploads app/data app/static/images/brand app/static/images/profiles app/static/images/posts app/data/sessions \
+    && chown -R nobody:nogroup app/data app/uploads app/static app/data/sessions \
+    && chmod -R 755 app/data app/uploads app/static app/data/sessions
 
 # Set environment variables
 ENV FLASK_APP=app.py

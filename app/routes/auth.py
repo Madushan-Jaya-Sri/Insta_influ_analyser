@@ -5,16 +5,29 @@ from flask import (
 from flask_login import login_user, logout_user, login_required, current_user
 import os
 import json
+from functools import wraps  # For restricting debug endpoint
 
 from app.models.forms import LoginForm, RegistrationForm
 from app.models.user import User, USERS_DATA_PATH
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
+# Restrict debug endpoint to specific IPs (e.g., localhost or your IP)
+def restrict_to_localhost(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        allowed_ips = ['127.0.0.1', '::1', '13.126.220.175']  # Add your IP if needed
+        if request.remote_addr not in allowed_ips:
+            current_app.logger.warning("Unauthorized access to debug endpoint from %s", request.remote_addr)
+            return jsonify({'error': 'Unauthorized'}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     # If user is already logged in, redirect to dashboard
     if current_user.is_authenticated:
+        current_app.logger.debug("User %s already authenticated, redirecting to dashboard", current_user.username)
         return redirect(url_for('main.dashboard'))
     
     form = LoginForm()
@@ -24,22 +37,25 @@ def login():
         password = form.password.data
         remember = form.remember_me.data
         
-        # Authenticate the user
+        current_app.logger.debug("Attempting to authenticate: %s", username_or_email)
         user = User.authenticate(username_or_email, password)
         
         if user:
             # Login the user
             login_user(user, remember=remember)
+            session.permanent = True  # Ensure session persists for 7 days (per run.py)
+            current_app.logger.debug("Authentication successful for: %s, Session: %s", username_or_email, session)
             
-            # Provide more informative welcome message with guidance to services
-            flash(f'Welcome back, {user.username}! You now have full access to all Instagram Analyzer features including dashboard, data analysis, and history tracking.', 'success')
+            # Provide welcome message
+            flash(f'Welcome back, {user.username}! You now have full access to all Instagram Analyzer features.', 'success')
             
-            # Redirect to the page requested before login, or dashboard if none
+            # Redirect to next page or dashboard
             next_page = request.args.get('next')
-            if next_page:
+            if next_page and url_for('main.index', _external=True) in next_page:  # Basic validation
                 return redirect(next_page)
             return redirect(url_for('main.dashboard'))
         else:
+            current_app.logger.debug("Authentication failed for: %s", username_or_email)
             flash('Invalid username/email or password', 'danger')
     
     return render_template('auth/login.html', form=form)
@@ -48,6 +64,7 @@ def login():
 def register():
     # If user is already logged in, redirect to dashboard
     if current_user.is_authenticated:
+        current_app.logger.debug("User %s already authenticated, redirecting to dashboard", current_user.username)
         return redirect(url_for('main.dashboard'))
     
     form = RegistrationForm()
@@ -62,28 +79,32 @@ def register():
             )
             
             # Log the user in
-            login_user(user)
+            login_user(user, remember=True)
+            session.permanent = True  # Ensure session persists
+            current_app.logger.debug("Registered and logged in user: %s, Session: %s", user.username, session)
             
-            # Enhanced welcome message with guidance
-            flash(f'Welcome to Instagram Analyzer, {user.username}! Your account has been created successfully. You now have full access to analyze influencers, track engagement metrics, and save your analysis history.', 'success')
+            # Welcome message
+            flash(f'Welcome to Instagram Analyzer, {user.username}! Your account has been created successfully.', 'success')
             
-            # Redirect to dashboard
             return redirect(url_for('main.dashboard'))
-        except ValueError as e:
-            flash(str(e), 'danger')
+        except Exception as e:
+            current_app.logger.error("Registration failed: %s", str(e))
+            flash(f'Registration failed: {str(e)}', 'danger')
     
     return render_template('auth/register.html', form=form)
 
 @auth_bp.route('/logout')
 @login_required
 def logout():
+    current_app.logger.debug("Logging out user: %s", current_user.username)
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('main.index'))
 
 @auth_bp.route('/debug')
+@restrict_to_localhost
 def debug_users():
-    """Debug endpoint to check user data (REMOVE IN PRODUCTION)"""
+    """Debug endpoint to check user data (RESTRICTED TO LOCALHOST)"""
     try:
         # Force reload users from file
         User.load_users()
@@ -111,7 +132,7 @@ def debug_users():
         
         # Get data from memory
         memory_users = {uid: {'username': user.username, 'email': user.email} 
-                      for uid, user in User._users.items()}
+                       for uid, user in User._users.items()}
         
         return jsonify({
             'file_path': USERS_DATA_PATH,
@@ -120,10 +141,12 @@ def debug_users():
             'file_content': file_content,
             'memory_users': memory_users,
             'user_count': len(User._users),
-            'data_dir_contents': os.listdir(os.path.dirname(USERS_DATA_PATH)) if os.path.exists(os.path.dirname(USERS_DATA_PATH)) else 'Directory not found'
+            'data_dir_contents': os.listdir(os.path.dirname(USERS_DATA_PATH)) if os.path.exists(os.path.dirname(USERS_DATA_PATH)) else 'Directory not found',
+            'session': dict(session)
         })
     except Exception as e:
+        current_app.logger.error("Debug endpoint error: %s", str(e))
         return jsonify({
             'error': str(e),
             'users_data_path': USERS_DATA_PATH
-        }) 
+        }), 500

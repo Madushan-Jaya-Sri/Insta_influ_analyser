@@ -10,6 +10,7 @@ services:
       - app_data:/app/app/data
       - app_uploads:/app/app/uploads
       - app_static:/app/app/static
+      - app_sessions:/app/app/data/sessions
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000"]
       interval: 30s
@@ -19,14 +20,14 @@ services:
     networks:
       - app_network
     environment:
-      - PYTHONUNBUFFERED=1  # Ensure logs are immediately visible
+      - PYTHONUNBUFFERED=1
 
   nginx:
     image: nginx:1.23-alpine
     ports:
       - "80:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf  # Use HTTP-only config
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
       - app_static:/app/app/static:ro
     depends_on:
       - web
@@ -53,6 +54,12 @@ volumes:
       type: none
       o: bind
       device: ${PWD}/docker_volumes/app_static
+  app_sessions:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/app_sessions
 
 networks:
   app_network:

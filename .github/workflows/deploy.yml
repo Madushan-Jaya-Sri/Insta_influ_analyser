@@ -35,18 +35,15 @@ jobs:
         ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@13.126.220.175 "
           mkdir -p /home/ubuntu/Insta_influ_analyser
           cd /home/ubuntu/Insta_influ_analyser
-
           if [ ! -d \".git\" ]; then
             git clone https://github.com/${{ github.repository }} .
           else
             git fetch --all
             git reset --hard origin/main
           fi
-
-          # Create directories for bind-mounted volumes
-          mkdir -p docker_volumes/app_data
-          chmod -R 755 docker_volumes/app_data
-
+          mkdir -p docker_volumes/app_data docker_volumes/app_uploads docker_volumes/app_static docker_volumes/app_sessions
+          chmod -R 755 docker_volumes
+          chown -R ubuntu:ubuntu docker_volumes
           mkdir -p certbot/conf certbot/www
 
           # Install docker-compose if it's not available
