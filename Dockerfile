@@ -6,9 +6,6 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     build-essential \
-    net-tools \
-    iputils-ping \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -19,10 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p uploads data static app/data/sessions
-
-# Set permissions
-RUN chmod -R 777 uploads data static app/data
+RUN mkdir -p uploads data static app/data/sessions app/uploads app/static
+RUN chmod -R 777 uploads data static app/data app/uploads app/static
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -37,4 +32,4 @@ EXPOSE 5000
 # CMD ["python", "run.py"]
 
 # WSGI entry point with explicit network binding
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--access-logfile", "-", "--error-logfile", "-", "--timeout", "120", "run:create_app()"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--access-logfile", "-", "--error-logfile", "-", "run:create_app()"] 

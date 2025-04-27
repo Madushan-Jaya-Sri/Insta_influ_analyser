@@ -2,110 +2,83 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Set up SSH
+      uses: actions/checkout@v2
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.AWS_SSH_KEY }}
+        
+    - name: Setup known hosts
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts
-        # Add GitHub to known hosts
-        ssh-keyscan -H github.com >> ~/.ssh/known_hosts
-
-    - name: Create .env file
+        ssh-keyscan ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts
+        
+    - name: Create env file
       run: |
-        echo "FLASK_ENV=production" > .env
-        echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
-        echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
-        echo "APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> .env
-        echo "APIFY_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> .env
-
-    - name: Create directory on EC2
-      run: ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "mkdir -p ~/Insta_influ_analyser"
-
-    - name: Upload .env to EC2
-      run: scp .env ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
-
-    - name: Upload repository to EC2
+        echo "Creating .env file..."
+        cat > .env << EOF
+        FLASK_ENV=production
+        SECRET_KEY=${{ secrets.SECRET_KEY }}
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}
+        EOF
+        
+    - name: Archive repository
       run: |
-        # Create an archive of the current repository
-        git archive --format=tar.gz -o repo.tar.gz HEAD
+        tar -czf app.tar.gz --exclude='.git' --exclude='.github' .
         
-        # Upload the repository archive to EC2
-        scp repo.tar.gz ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
-        
-        # Extract the repository on the EC2 instance
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} << 'ENDSSH'
-        cd ~/Insta_influ_analyser
-        
-        # Backup existing content
-        timestamp=$(date +%Y%m%d%H%M%S)
-        mkdir -p ~/backups/insta_influ_$timestamp
-        
-        # Move all existing files to backup (except the new repo.tar.gz)
-        ls -A | grep -v "repo.tar.gz" | xargs -I{} mv {} ~/backups/insta_influ_$timestamp/ 2>/dev/null || true
-        
-        # Extract the repository archive
-        tar -xzf repo.tar.gz
-        
-        # Remove the archive
-        rm repo.tar.gz
-        
-        # Copy back the .env file
-        cp ~/backups/insta_influ_$timestamp/.env . 2>/dev/null || true
-        ENDSSH
-
-    - name: Deploy to EC2
+    - name: Create project directory on EC2
       run: |
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} << 'ENDSSH'
-        cd ~/Insta_influ_analyser
-
-        # Ensure Docker and Docker Compose are installed
-        if ! command -v docker &> /dev/null; then
-          echo "Installing Docker..."
-          sudo apt-get update
-          sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-          sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-          sudo apt-get update
-          sudo apt-get install -y docker-ce
-          sudo usermod -aG docker $USER
-        fi
-
-        # Create necessary directories
-        mkdir -p docker_volumes/app_data docker_volumes/app_uploads docker_volumes/app_static docker_volumes/app_sessions
-        chmod -R 755 docker_volumes
-        chown -R $USER:$USER docker_volumes
-
-        # Install docker-compose if it's not available
-        if ! command -v docker-compose &> /dev/null; then
-          echo Installing docker-compose...
-          sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
-        fi
-
-        # Restart Docker just in case
-        sudo systemctl restart docker || true
-
-        # Use docker compose (v2) if available
-        if command -v docker compose &> /dev/null; then
-          docker compose -f docker-compose.prod.yml down
-          docker compose -f docker-compose.prod.yml build --no-cache
-          docker compose -f docker-compose.prod.yml up -d
-        else
-          docker-compose -f docker-compose.prod.yml down
-          docker-compose -f docker-compose.prod.yml build --no-cache
-          docker-compose -f docker-compose.prod.yml up -d
-        fi
-        ENDSSH
-
-    - name: Clean up SSH keys
-      run: rm -rf ~/.ssh .env repo.tar.gz
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "mkdir -p ~/Insta_influ_analyser"
+        
+    - name: Upload .env and repository
+      run: |
+        scp .env ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
+        scp app.tar.gz ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/
+        
+    - name: Extract and backup on EC2
+      run: |
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/ && \
+        if [ -d 'Insta_influ_analyser.bak' ]; then rm -rf Insta_influ_analyser.bak; fi && \
+        if [ -d 'Insta_influ_analyser-code' ]; then mv Insta_influ_analyser-code Insta_influ_analyser.bak; fi && \
+        mkdir -p Insta_influ_analyser-code && \
+        tar -xzf app.tar.gz -C Insta_influ_analyser-code && \
+        rm app.tar.gz"
+        
+    - name: Run setup script
+      run: |
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "if ! command -v docker &> /dev/null; then cd ~/Insta_influ_analyser-code && bash scripts/setup_ec2.sh; fi"
+        
+    - name: Deploy application
+      run: |
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser-code && \
+        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_data && \
+        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_uploads && \
+        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_static && \
+        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_sessions && \
+        mkdir -p ~/Insta_influ_analyser/nginx && \
+        cp -r nginx/* ~/Insta_influ_analyser/nginx/ && \
+        cp docker-compose.yml ~/Insta_influ_analyser/ && \
+        cp Dockerfile ~/Insta_influ_analyser/ && \
+        cp .env ~/Insta_influ_analyser/ && \
+        cp -r * ~/Insta_influ_analyser/ && \
+        cd ~/Insta_influ_analyser && \
+        docker-compose down && \
+        docker-compose build --no-cache && \
+        docker-compose up -d"
+        
+    - name: Clean up
+      run: |
+        rm -f ~/.ssh/id_rsa
+        rm -f .env

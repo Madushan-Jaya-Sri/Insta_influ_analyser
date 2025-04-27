@@ -87,3 +87,4 @@ WTForms==3.2.1
 yarl==1.20.0
 flask-login==0.6.2
 email_validator==2.2.0
+flask-session==0.5.0
