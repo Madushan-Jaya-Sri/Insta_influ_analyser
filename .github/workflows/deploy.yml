@@ -66,6 +66,12 @@ jobs:
       run: |
         ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "if ! command -v docker &> /dev/null; then cd ~/Insta_influ_analyser-code && bash scripts/setup_ec2.sh; fi"
         
+    - name: Set up directories with proper permissions
+      run: |
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "mkdir -p ~/Insta_influ_analyser/app/data/sessions && \
+        chmod -R 777 ~/Insta_influ_analyser/app/data && \
+        sudo chown -R ${{ secrets.AWS_USERNAME }}:${{ secrets.AWS_USERNAME }} ~/Insta_influ_analyser"
+        
     - name: Deploy application
       run: |
         ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser-code && \
