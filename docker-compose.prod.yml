@@ -3,6 +3,8 @@ services:
     build: .
     restart: always
     container_name: flask_app
+    ports:
+      - "5000:5000"  # Expose Flask port for direct testing
     volumes:
       - ./docker_volumes/app_uploads:/app/uploads
       - ./docker_volumes/app_data:/app/data
