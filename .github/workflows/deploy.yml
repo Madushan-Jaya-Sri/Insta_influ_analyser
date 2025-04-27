@@ -36,7 +36,13 @@ jobs:
         
     - name: Archive repository
       run: |
-        tar -czf app.tar.gz --exclude='.git' --exclude='.github' .
+        # Use a specific directory to avoid "file changed as we read it" error
+        mkdir -p /tmp/app_archive
+        cp -R . /tmp/app_archive
+        cd /tmp/app_archive
+        tar -czf /tmp/app.tar.gz --exclude='.git' --exclude='.github' .
+        cp /tmp/app.tar.gz $GITHUB_WORKSPACE/
+        cd $GITHUB_WORKSPACE
         
     - name: Create project directory on EC2
       run: |
@@ -45,7 +51,7 @@ jobs:
     - name: Upload .env and repository
       run: |
         scp .env ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
-        scp app.tar.gz ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/
+        scp /tmp/app.tar.gz ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/
         
     - name: Extract and backup on EC2
       run: |
