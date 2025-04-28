@@ -1,85 +1,36 @@
-name: Deploy to EC2 (Fresh Install)
+name: Deploy to EC2
 
 on:
   push:
     branches:
       - main
-      - master
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-      
-    - name: Setup SSH
-      uses: webfactory/ssh-agent@v0.7.0
-      with:
-        ssh-private-key: ${{ secrets.AWS_SSH_KEY }}
-        
-    - name: Setup known hosts
-      run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts
-        
-    - name: Create env file
-      run: |
-        echo "Creating .env file..."
-        cat > .env << EOF
-        FLASK_ENV=production
-        SECRET_KEY=${{ secrets.SECRET_KEY }}
-        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-        APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}
-        EOF
-        
-    - name: Archive repository
-      run: |
-        # Create temporary directory for stable snapshot
-        TMP_DIR=$(mktemp -d)
-        
-        # Copy all files excluding .git and .github
-        rsync -av --exclude='.git' --exclude='.github' --exclude='node_modules' . $TMP_DIR/
-        
-        # Create archive from the temporary directory
-        cd $TMP_DIR
-        tar -czf app.tar.gz .
-        cp app.tar.gz $GITHUB_WORKSPACE/
-        cd $GITHUB_WORKSPACE
-        
-    - name: Fresh deployment setup
-      run: |
-        # Create directories and set up EC2 for fresh deployment
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "
-        mkdir -p ~/Insta_influ_analyser
-        "
-        
-    - name: Upload files to EC2
-      run: |
-        # Upload .env and application archive
-        scp .env ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
-        scp app.tar.gz ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
-        
-    - name: Extract and deploy
-      run: |
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "
-        cd ~/Insta_influ_analyser && 
-        tar -xzf app.tar.gz || echo 'Some files might be incomplete but we will continue' && 
-        rm app.tar.gz &&
-        
-        # Create all necessary directories
-        mkdir -p docker_volumes/app_data docker_volumes/app_uploads docker_volumes/app_static docker_volumes/app_sessions &&
-        mkdir -p app/data/sessions &&
-        mkdir -p static/images/posts static/images/profiles static/images/misc &&
-        chmod -R 777 docker_volumes app/data/sessions static/images &&
-        
-        # Deploy with docker-compose
-        docker-compose -f docker-compose.prod.yml down 2>/dev/null || true &&
-        docker-compose -f docker-compose.prod.yml build --no-cache &&
-        docker-compose -f docker-compose.prod.yml up -d
-        "
-        
-    - name: Clean up
-      run: |
-        rm -f .env app.tar.gz
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          
+      - name: Add host key to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        run: |
+          # Create deploy directory on EC2 if it doesn't exist
+          ssh ubuntu@${{ secrets.EC2_HOST }} "mkdir -p ~/Insta_influ_analyser"
+          
+          # Sync files to EC2
+          rsync -avz --exclude '.git/' --exclude 'venv/' --exclude '__pycache__/' \
+            --exclude 'uploads/' --exclude 'data/' --exclude 'docker_volumes/' \
+            ./ ubuntu@${{ secrets.EC2_HOST }}:~/Insta_influ_analyser/
+          
+          # Execute deploy script on EC2
+          ssh ubuntu@${{ secrets.EC2_HOST }} "cd ~/Insta_influ_analyser && bash scripts/deploy.sh"

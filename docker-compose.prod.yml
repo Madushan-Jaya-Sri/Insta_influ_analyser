@@ -3,12 +3,12 @@ services:
     build: .
     restart: always
     container_name: flask_app
-    ports:
-      - "5000:5000"  # Expose Flask port for direct testing
+    expose:
+      - "5000"  # Only expose to internal network, not to host
     volumes:
-      - ./docker_volumes/app_uploads:/app/uploads
-      - ./docker_volumes/app_data:/app/data
-      - ./docker_volumes/app_static:/app/static
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+      - ./static:/app/static
     env_file:
       - .env
     environment:
@@ -21,10 +21,11 @@ services:
     restart: always
     container_name: nginx
     ports:
-      - "80:80"
+      - "80:80"  # Map port 80 to host
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
-      - ./docker_volumes/app_static:/app/static
+      - ./uploads:/app/uploads
+      - ./static:/app/static
     depends_on:
       - app
     networks:

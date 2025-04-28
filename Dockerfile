@@ -22,7 +22,7 @@ RUN chmod -R 777 uploads data static app/data app/uploads app/static
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV FLASK_APP=run.py
+ENV FLASK_APP=wsgi.py
 ENV FLASK_ENV=production
 
 # EXPOSE port
@@ -32,4 +32,4 @@ EXPOSE 5000
 # CMD ["python", "run.py"]
 
 # WSGI entry point with explicit network binding
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--access-logfile", "-", "--error-logfile", "-", "run:create_app()"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "300", "--access-logfile", "-", "--error-logfile", "-", "wsgi:app"] 

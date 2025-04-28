@@ -16,5 +16,11 @@
         "username": "madush",
         "email": "mohamed.thareef@momentro.com",
         "password_hash": "scrypt:32768:8:1$0vSOSMatfVXkUeWu$19ff31418b94b7a3d4c46b5a0a40a81d5dfc8b23159a643c16366a713232f3d49b65acd720dacec6074db461d1b5e9994febf36e14b91e00457cfb92213da0b3"
+    },
+    {
+        "id": "1df393b4-820c-48b7-a0d8-fdbfcde7dff4",
+        "username": "madushan1",
+        "email": "madushan.jayasri@momentro.com",
+        "password_hash": "scrypt:32768:8:1$jFEGg9gLpxXRlht5$f9b7b68d9d34e59706c3b31c6e4b34358b717996458d8b78d137e45baab66003f22abfcf1927c8765ed625b07b5b3ad263c300bf8a3f1302c3938d8e5b2ea6a2"
     }
 ]

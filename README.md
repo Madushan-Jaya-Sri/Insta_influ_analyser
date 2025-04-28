@@ -71,42 +71,54 @@ A web application for analyzing Instagram influencer profiles and engagement met
 
 ### Manual Deployment
 
-1. Launch an EC2 instance (recommend t2.medium or higher with Ubuntu 22.04)
-
-2. SSH into your instance:
+1. SSH into your EC2 instance:
    ```bash
-   ssh -i your-key.pem ubuntu@your-ec2-ip
+   ssh -i your-key.pem ubuntu@13.126.220.175
    ```
 
-3. Run the setup script:
-   ```bash
-   curl -sSL https://raw.githubusercontent.com/YOUR_USERNAME/Insta_influ_analyser/main/scripts/setup_ec2.sh | bash
-   ```
-
-4. Clone your repository:
+2. Clone your repository:
    ```bash
    git clone https://github.com/YOUR_USERNAME/Insta_influ_analyser.git ~/Insta_influ_analyser
    cd ~/Insta_influ_analyser
    ```
 
-5. Create the `.env` file with your secrets:
+3. Create the `.env` file with your secrets:
    ```bash
    cp .env.example .env
    nano .env  # Edit with your API keys
    ```
 
-6. Start the application:
+4. Run the deployment script:
    ```bash
-   docker-compose -f docker-compose.prod.yml up -d
+   bash scripts/deploy.sh
    ```
+
+5. Your application will be available at http://13.126.220.175
 
 ### CI/CD Setup with GitHub Actions
 
 1. Add the following secrets to your GitHub repository:
    - `SSH_PRIVATE_KEY`: Your EC2 SSH private key
-   - `EC2_HOST`: Your EC2 instance IP or DNS
+   - `EC2_HOST`: Your EC2 instance IP (13.126.220.175)
 
 2. Push to the main branch to trigger automatic deployment.
+
+### Maintenance
+
+You can use the maintenance script for common tasks:
+```bash
+# Show logs
+bash scripts/maintenance.sh logs
+
+# Restart containers
+bash scripts/maintenance.sh restart
+
+# Check container status
+bash scripts/maintenance.sh status
+
+# Pull latest code and update
+bash scripts/maintenance.sh update
+```
 
 ## SSL Configuration
 

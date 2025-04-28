@@ -1,51 +1,48 @@
 #!/bin/bash
-set -e
 
-echo "=== Deploying Insta_influ_analyser ==="
+# Deployment script for Instagram Influencer Analyzer
+# This script should be run on the EC2 instance
 
-# Create necessary directories
-echo "Setting up directories..."
-mkdir -p docker_volumes/app_data docker_volumes/app_uploads docker_volumes/app_static docker_volumes/app_sessions
-chmod -R 755 docker_volumes
-sudo chown -R $USER:$USER docker_volumes
+set -e  # Exit on any error
 
-# Make sure all dependencies are in requirements.txt
-if ! grep -q "flask-session" requirements.txt; then
-  echo "Adding flask-session to requirements.txt"
-  echo "flask-session==0.5.0" >> requirements.txt
+echo "Starting deployment process..."
+
+# Ensure we're in the correct directory
+cd "$(dirname "$0")/.."
+PROJECT_ROOT=$(pwd)
+
+# Check if .env file exists
+if [ ! -f .env ]; then
+    echo "Error: .env file not found. Create it before deploying."
+    exit 1
 fi
 
-# Ensure nginx directory exists
-mkdir -p nginx
+# Ensure necessary directories exist
+echo "Creating necessary directories..."
+mkdir -p uploads data static app/data/sessions app/uploads app/static/images
+chmod -R 777 uploads data static app/data app/uploads app/static
 
-# Set up environment file if not exists
-if [ ! -f ".env" ]; then
-  echo "Creating .env file"
-  cat > .env << EOF
-FLASK_ENV=production
-SECRET_KEY="Insta_influ_analyser"
-OPENAI_API_KEY="your_openai_api_key"
-APIFY_API_TOKEN="your_apify_token"
-APIFY_TOKEN="your_apify_token"
-EOF
-  echo "Created .env file - please edit with your actual API keys before continuing"
-  exit 1
+# Pull latest changes if it's a git repository
+if [ -d .git ]; then
+    echo "Pulling latest changes from git..."
+    git pull
 fi
 
-# Stop any existing containers
-echo "Stopping existing containers..."
+# Stop and remove existing containers
+echo "Stopping any existing containers..."
 docker-compose -f docker-compose.prod.yml down || true
 
-# Build and start the container
-echo "Building and starting the application..."
+# Build and start new containers
+echo "Building and starting new containers..."
 docker-compose -f docker-compose.prod.yml up -d --build
 
-# Check container status
+# Check if containers are running
 echo "Checking container status..."
+sleep 5
 docker ps
 
-echo "=== Deployment complete ==="
-echo "Your application should be available at:"
-echo "http://$(curl -s ifconfig.me):80"
-echo "or"
-echo "http://$(curl -s ifconfig.me):5000 (direct to Flask)" 
+echo "Deployment completed successfully!"
+echo "Your application should now be available at http://13.126.220.175"
+echo ""
+echo "To view logs:"
+echo "  docker-compose -f docker-compose.prod.yml logs -f" 
