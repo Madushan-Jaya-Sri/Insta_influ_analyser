@@ -20,7 +20,7 @@ fi
 # Ensure necessary directories exist
 echo "Creating necessary directories..."
 mkdir -p uploads data static app/data/sessions app/uploads app/static/images app/static/css app/static/js app/static/images/brand
-chmod -R 777 uploads data static app/data app/uploads app/static
+chmod -R 777 uploads data static app/data app/uploads app/static 2>/dev/null || true
 
 # Make sure CSS directories exist
 if [ ! -f app/static/css/style.css ]; then
@@ -95,6 +95,13 @@ body {
 EOF
 fi
 
+# Create an empty users.json file if it doesn't exist
+if [ ! -f app/data/users.json ]; then
+    echo "Creating empty users.json file..."
+    echo "[]" > app/data/users.json
+    chmod 666 app/data/users.json 2>/dev/null || true
+fi
+
 # Pull latest changes if it's a git repository
 if [ -d .git ]; then
     echo "Pulling latest changes from git..."
@@ -112,8 +119,12 @@ docker-compose -f docker-compose.prod.yml up -d --build
 # Ensure permissions are correctly set after container startup
 echo "Setting proper permissions for data directories..."
 sleep 5
-chmod -R 777 uploads data static app/data app/uploads app/static
-docker exec flask_app chmod -R 777 /app/app/data /app/data
+chmod -R 777 uploads data static app/data app/uploads app/static 2>/dev/null || true
+
+# Use docker exec to fix permissions inside container
+echo "Fixing permissions inside Docker container..."
+docker exec flask_app mkdir -p /app/app/data/sessions || true
+docker exec flask_app chmod -R 777 /app/app/data /app/data || true
 
 # Check if containers are running
 echo "Checking container status..."
