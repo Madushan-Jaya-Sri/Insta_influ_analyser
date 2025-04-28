@@ -15,22 +15,22 @@ jobs:
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.8.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-          
+          ssh-private-key: ${{ secrets.AWS_SSH_KEY }}
+
       - name: Add host key to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy to EC2
         run: |
           # Create deploy directory on EC2 if it doesn't exist
-          ssh ubuntu@${{ secrets.EC2_HOST }} "mkdir -p ~/Insta_influ_analyser"
+          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "mkdir -p ~/Insta_influ_analyser"
           
           # Sync files to EC2
           rsync -avz --exclude '.git/' --exclude 'venv/' --exclude '__pycache__/' \
             --exclude 'uploads/' --exclude 'data/' --exclude 'docker_volumes/' \
-            ./ ubuntu@${{ secrets.EC2_HOST }}:~/Insta_influ_analyser/
+            ./ ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
           
           # Execute deploy script on EC2
-          ssh ubuntu@${{ secrets.EC2_HOST }} "cd ~/Insta_influ_analyser && bash scripts/deploy.sh"
+          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser && bash scripts/deploy.sh"
