@@ -251,15 +251,23 @@ networks:
     driver: bridge
 EOF
 
-# Create data directory
-mkdir -p ~/Insta_influ_analyser/app/data
+# Create data directory with proper permissions
+sudo mkdir -p ~/Insta_influ_analyser/app/data
+sudo chown -R ubuntu:ubuntu ~/Insta_influ_analyser/app/data
+sudo chmod -R 755 ~/Insta_influ_analyser/app/data
 
-# Set permissions
-chmod -R 777 ~/Insta_influ_analyser/app/data
+# Create database file with proper permissions
+touch ~/Insta_influ_analyser/app/data/users.db
+sudo chown ubuntu:ubuntu ~/Insta_influ_analyser/app/data/users.db
+sudo chmod 644 ~/Insta_influ_analyser/app/data/users.db
 
 # Copy files to container
 docker cp ~/Insta_influ_analyser/app/models/user.py flask_app:/app/app/models/user.py
 docker cp ~/Insta_influ_analyser/app/routes/auth.py flask_app:/app/app/routes/auth.py
+
+# Set permissions inside container
+docker exec flask_app chown -R root:root /app/app/data
+docker exec flask_app chmod -R 755 /app/app/data
 
 # Restart container
 docker restart flask_app
