@@ -41,3 +41,7 @@ jobs:
       - name: Run deploy script on EC2
         run: |
           ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser && bash scripts/deploy.sh"
+
+      - name: Fix permissions and create required files
+        run: |
+          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser && bash scripts/fix_permissions.sh"
