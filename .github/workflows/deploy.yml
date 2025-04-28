@@ -24,13 +24,20 @@ jobs:
 
       - name: Deploy to EC2
         run: |
-          # Create deploy directory on EC2 if it doesn't exist
           ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "mkdir -p ~/Insta_influ_analyser"
-          
-          # Sync files to EC2
           rsync -avz --exclude '.git/' --exclude 'venv/' --exclude '__pycache__/' \
             --exclude 'uploads/' --exclude 'data/' --exclude 'docker_volumes/' \
             ./ ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
-          
-          # Execute deploy script on EC2
+
+      - name: Create .env file on EC2
+        run: |
+          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'FLASK_ENV=production' > ~/Insta_influ_analyser/.env"
+          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'SECRET_KEY=${{ secrets.SECRET_KEY }}' >> ~/Insta_influ_analyser/.env"
+          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}' >> ~/Insta_influ_analyser/.env"
+          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}' >> ~/Insta_influ_analyser/.env"
+          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'AWS_HOST=${{ secrets.AWS_HOST }}' >> ~/Insta_influ_analyser/.env"
+          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'AWS_USERNAME=${{ secrets.AWS_USERNAME }}' >> ~/Insta_influ_analyser/.env"
+
+      - name: Run deploy script on EC2
+        run: |
           ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser && bash scripts/deploy.sh"
