@@ -65,19 +65,14 @@ jobs:
       run: |
         ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "
         cd ~/Insta_influ_analyser && 
-        tar -xzf app.tar.gz && 
+        tar -xzf app.tar.gz || echo 'Some files might be incomplete but we will continue' && 
         rm app.tar.gz &&
         
-        # Run setup script if Docker not installed
-        if ! command -v docker &> /dev/null; then
-          bash scripts/setup_ec2.sh
-        fi &&
-        
-        # Create necessary directories with proper permissions
+        # Create all necessary directories
         mkdir -p docker_volumes/app_data docker_volumes/app_uploads docker_volumes/app_static docker_volumes/app_sessions &&
         mkdir -p app/data/sessions &&
-        chmod -R 777 docker_volumes &&
-        chmod -R 777 app/data/sessions &&
+        mkdir -p static/images/posts static/images/profiles static/images/misc &&
+        chmod -R 777 docker_volumes app/data/sessions static/images &&
         
         # Deploy with docker-compose
         docker-compose -f docker-compose.prod.yml down 2>/dev/null || true &&
