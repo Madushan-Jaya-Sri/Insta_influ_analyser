@@ -74,21 +74,30 @@ jobs:
         
     - name: Deploy application
       run: |
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser-code && \
-        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_data && \
-        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_uploads && \
-        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_static && \
-        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_sessions && \
-        mkdir -p ~/Insta_influ_analyser/nginx && \
-        cp -r nginx/* ~/Insta_influ_analyser/nginx/ && \
-        cp docker-compose.yml ~/Insta_influ_analyser/ && \
-        cp Dockerfile ~/Insta_influ_analyser/ && \
-        cp .env ~/Insta_influ_analyser/ && \
-        cp -r * ~/Insta_influ_analyser/ && \
-        cd ~/Insta_influ_analyser && \
-        docker-compose down && \
-        docker-compose build --no-cache && \
-        docker-compose up -d"
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "
+        # Clean up existing application directory
+        rm -rf ~/Insta_influ_analyser/* 
+        
+        # Extract application files directly to the main directory
+        cd ~/ && 
+        tar -xzf app.tar.gz -C ~/Insta_influ_analyser && 
+        rm app.tar.gz &&
+        
+        # Setup required directories with proper permissions
+        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_data &&
+        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_uploads &&
+        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_static &&
+        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_sessions &&
+        mkdir -p ~/Insta_influ_analyser/app/data/sessions &&
+        mkdir -p ~/Insta_influ_analyser/nginx &&
+        chmod -R 777 ~/Insta_influ_analyser/docker_volumes &&
+        chmod -R 777 ~/Insta_influ_analyser/app/data/sessions &&
+        
+        # Deploy the application
+        cd ~/Insta_influ_analyser &&
+        docker-compose -f docker-compose.prod.yml down &&
+        docker-compose -f docker-compose.prod.yml build --no-cache &&
+        docker-compose -f docker-compose.prod.yml up -d"
         
     - name: Clean up
       run: |
