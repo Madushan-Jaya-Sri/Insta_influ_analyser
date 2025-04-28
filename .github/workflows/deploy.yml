@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy to EC2 (Fresh Install)
 
 on:
   push:
@@ -36,70 +36,45 @@ jobs:
         
     - name: Archive repository
       run: |
-        # Use a specific directory to avoid "file changed as we read it" error
-        mkdir -p /tmp/app_archive
-        cp -R . /tmp/app_archive
-        cd /tmp/app_archive
-        tar -czf /tmp/app.tar.gz --exclude='.git' --exclude='.github' .
-        cp /tmp/app.tar.gz $GITHUB_WORKSPACE/
-        cd $GITHUB_WORKSPACE
+        tar -czf app.tar.gz --exclude='.git' --exclude='.github' .
         
-    - name: Create project directory on EC2
+    - name: Fresh deployment setup
       run: |
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "mkdir -p ~/Insta_influ_analyser"
+        # Create directories and set up EC2 for fresh deployment
+        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "
+        mkdir -p ~/Insta_influ_analyser
+        "
         
-    - name: Upload .env and repository
+    - name: Upload files to EC2
       run: |
+        # Upload .env and application archive
         scp .env ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
-        scp /tmp/app.tar.gz ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/
+        scp app.tar.gz ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
         
-    - name: Extract and backup on EC2
-      run: |
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/ && \
-        if [ -d 'Insta_influ_analyser.bak' ]; then rm -rf Insta_influ_analyser.bak; fi && \
-        if [ -d 'Insta_influ_analyser-code' ]; then mv Insta_influ_analyser-code Insta_influ_analyser.bak; fi && \
-        mkdir -p Insta_influ_analyser-code && \
-        tar -xzf app.tar.gz -C Insta_influ_analyser-code && \
-        rm app.tar.gz"
-        
-    - name: Run setup script
-      run: |
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "if ! command -v docker &> /dev/null; then cd ~/Insta_influ_analyser-code && bash scripts/setup_ec2.sh; fi"
-        
-    - name: Set up directories with proper permissions
-      run: |
-        ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "mkdir -p ~/Insta_influ_analyser/app/data/sessions && \
-        chmod -R 777 ~/Insta_influ_analyser/app/data && \
-        sudo chown -R ${{ secrets.AWS_USERNAME }}:${{ secrets.AWS_USERNAME }} ~/Insta_influ_analyser"
-        
-    - name: Deploy application
+    - name: Extract and deploy
       run: |
         ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "
-        # Clean up existing application directory
-        rm -rf ~/Insta_influ_analyser/* 
-        
-        # Extract application files directly to the main directory
-        cd ~/ && 
-        tar -xzf app.tar.gz -C ~/Insta_influ_analyser && 
+        cd ~/Insta_influ_analyser && 
+        tar -xzf app.tar.gz && 
         rm app.tar.gz &&
         
-        # Setup required directories with proper permissions
-        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_data &&
-        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_uploads &&
-        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_static &&
-        mkdir -p ~/Insta_influ_analyser/docker_volumes/app_sessions &&
-        mkdir -p ~/Insta_influ_analyser/app/data/sessions &&
-        mkdir -p ~/Insta_influ_analyser/nginx &&
-        chmod -R 777 ~/Insta_influ_analyser/docker_volumes &&
-        chmod -R 777 ~/Insta_influ_analyser/app/data/sessions &&
+        # Run setup script if Docker not installed
+        if ! command -v docker &> /dev/null; then
+          bash scripts/setup_ec2.sh
+        fi &&
         
-        # Deploy the application
-        cd ~/Insta_influ_analyser &&
-        docker-compose -f docker-compose.prod.yml down &&
+        # Create necessary directories with proper permissions
+        mkdir -p docker_volumes/app_data docker_volumes/app_uploads docker_volumes/app_static docker_volumes/app_sessions &&
+        mkdir -p app/data/sessions &&
+        chmod -R 777 docker_volumes &&
+        chmod -R 777 app/data/sessions &&
+        
+        # Deploy with docker-compose
+        docker-compose -f docker-compose.prod.yml down 2>/dev/null || true &&
         docker-compose -f docker-compose.prod.yml build --no-cache &&
-        docker-compose -f docker-compose.prod.yml up -d"
+        docker-compose -f docker-compose.prod.yml up -d
+        "
         
     - name: Clean up
       run: |
-        rm -f ~/.ssh/id_rsa
-        rm -f .env
+        rm -f .env app.tar.gz
