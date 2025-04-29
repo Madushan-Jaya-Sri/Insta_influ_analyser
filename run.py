@@ -12,6 +12,9 @@ def create_app():
     # Define base directory for better path management
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
+    # Use environment variable for data directory if available
+    data_dir = os.getenv('DATABASE_DIRECTORY', os.path.join(base_dir, 'app', 'data'))
+    
     app = Flask(__name__, 
                 template_folder=os.path.join(base_dir, 'app', 'templates'),
                 static_folder=os.path.join(base_dir, 'app', 'static'),
@@ -19,7 +22,7 @@ def create_app():
     
     # Configure app
     app.config['SESSION_TYPE'] = 'filesystem'
-    app.config['SESSION_FILE_DIR'] = os.path.join(base_dir, 'app', 'data', 'sessions')
+    app.config['SESSION_FILE_DIR'] = os.path.join(data_dir, 'sessions')
     app.config['SESSION_PERMANENT'] = True
     app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=7)
     app.config['SESSION_USE_SIGNER'] = True
@@ -29,11 +32,11 @@ def create_app():
     app.config['SESSION_COOKIE_PATH'] = '/'  # Ensure cookie is valid for all routes
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-dev-key')
     app.config['UPLOAD_FOLDER'] = os.path.join(base_dir, 'app', 'uploads')
-    app.config['DATA_FOLDER'] = os.path.join(base_dir, 'app', 'data')
+    app.config['DATA_FOLDER'] = data_dir
     app.config['IMAGES_FOLDER'] = os.path.join(base_dir, 'app', 'static', 'images')
     
     # Configure SQLAlchemy
-    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(base_dir, 'app', 'data', 'insta_analyser.db')}"
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(data_dir, 'insta_analyser.db')}"
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # Initialize flask-session
@@ -42,7 +45,7 @@ def create_app():
     # Ensure folders exist
     for folder in [app.config['UPLOAD_FOLDER'], app.config['DATA_FOLDER'], app.config['IMAGES_FOLDER'], app.config['SESSION_FILE_DIR']]:
         if not os.path.exists(folder):
-            os.makedirs(folder)
+            os.makedirs(folder, exist_ok=True, mode=0o777)
     
     # Initialize Database
     from app.models.database import init_db

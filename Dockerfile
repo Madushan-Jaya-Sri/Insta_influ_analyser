@@ -37,14 +37,19 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy application code
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p /app/app/data/sessions /app/app/static/uploads \
-    && chmod 755 /app/app/data/sessions /app/app/static/uploads
+# Create necessary directories with proper permissions BEFORE switching user
+RUN mkdir -p /app/app/data/sessions /app/app/static/uploads /app/app/data/db \
+    && chmod -R 777 /app/app/data /app/app/static/uploads
+
+# Create database directory and ensure SQLite has permissions
+RUN touch /app/app/data/insta_analyser.db \
+    && chmod 666 /app/app/data/insta_analyser.db
 
 # Set environment variables for Flask
 ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
+ENV DATABASE_DIRECTORY=/app/app/data
 
 # Expose port
 EXPOSE 8000
