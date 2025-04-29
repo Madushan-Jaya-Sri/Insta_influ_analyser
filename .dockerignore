@@ -1,4 +1,4 @@
-# Version control
+# Git
 .git
 .gitignore
 .github
@@ -10,6 +10,8 @@ __pycache__/
 *.so
 .Python
 env/
+venv/
+ENV/
 build/
 develop-eggs/
 dist/
@@ -24,15 +26,25 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
-venv/
-.venv/
-ENV/
 
 # Docker
-.dockerignore
 Dockerfile
-docker-compose.yml
-docker-compose.prod.yml
+.dockerignore
+
+# Development
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Runtime data
+app/data/
+app/uploads/
+app/static/images/
+
+# Logs
+logs/
+*.log
 
 # Deployment scripts
 scripts/
@@ -75,10 +87,6 @@ app/static/images/misc/*
 !app/static/images/profiles/.gitkeep
 !app/static/images/posts/.gitkeep
 !app/static/images/misc/.gitkeep
-
-# Logs
-logs/
-*.log
 
 # Environment files
 .env

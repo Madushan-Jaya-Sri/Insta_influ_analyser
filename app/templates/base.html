@@ -23,42 +23,250 @@
     <style>
         body {
             font-family: 'Poppins', sans-serif;
-            background-color: #f8f9fa;
+            background: linear-gradient(135deg, #f8fafc 0%, #f8e1f4 100%);
             color: #333;
         }
         
         .navbar {
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            background: #f8f9fb;
+            border-bottom: 1px solid #e5e5e5;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            padding: 0.8rem 0;
         }
         
+        /* Fix for white text in navigation */
+        .navbar .nav-link {
+            color: #2d3748 !important;
+        }
+        
+        /* Instagram gradient for brand text */
+        .instagram-navbar-brand {
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            font-size: 1.25rem;
+            background: linear-gradient(90deg, #fd1d1d, #833ab4, #fd1d1d, #fcb045);
+            background-size: 200% auto;
+            color: transparent;
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradient-move 3s linear infinite;
+        }
+        
+        .instagram-navbar-icon {
+            background: linear-gradient(90deg, #fd1d1d, #833ab4, #fd1d1d, #fcb045);
+            background-size: 200% auto;
+            color: transparent;
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradient-move 3s linear infinite;
+        }
+        
+        @keyframes gradient-move {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 100% 50%; }
+        }
+        
+        /* Navigation tabs */
+        .navbar .nav-tab {
+            color: #2d3748 !important; /* Dark text color */
+            font-weight: 500;
+            padding: 0.6rem 1.2rem;
+            margin: 0 0.2rem;
+            border-radius: 12px;
+            transition: all 0.2s ease-in-out;
+            position: relative;
+        }
+        
+        .navbar .nav-tab:hover,
+        .navbar .nav-tab.active {
+            background: #f3f1fa !important;
+            color: #232323 !important;
+        }
+        
+        .navbar .nav-tab::after {
+            content: '';
+            position: absolute;
+            bottom: 6px;
+            left: 18%;
+            right: 18%;
+            height: 3px;
+            background: linear-gradient(90deg, #fd1d1d, #833ab4, #fd1d1d, #fcb045);
+            background-size: 200% auto;
+            animation: gradient-move 2s linear infinite;
+            opacity: 0;
+            border-radius: 2px;
+            transition: opacity 0.2s ease-in-out;
+        }
+        
+        .navbar .nav-tab:hover::after,
+        .navbar .nav-tab.active::after {
+            opacity: 1;
+        }
+        
+        .navbar .nav-tab i {
+            color: #833ab4;
+            margin-right: 8px;
+        }
+        
+        /* Dropdown styles */
+        .navbar .nav-item.dropdown {
+            position: relative;
+        }
+        
+        .navbar .dropdown-toggle::after {
+            transition: transform 0.2s ease;
+            border-top-color: #2d3748;
+            margin-left: 8px;
+        }
+        
+        .navbar .dropdown-toggle[aria-expanded="true"]::after {
+            transform: rotate(180deg);
+        }
+        
+        .navbar .dropdown-toggle[aria-expanded="true"] {
+            background: #f3f1fa !important;
+            border-radius: 12px 12px 0 0;
+        }
+        
+        .navbar .dropdown-menu {
+            min-width: 220px;
+            margin-top: 0.3rem;
+            border: none;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            transition: all 0.2s ease;
+        }
+        
+        .navbar .dropdown-item {
+            color: #2d3748;
+            padding: 0.7rem 1rem;
+            border-radius: 8px;
+            margin: 0.2rem 0.5rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .navbar .dropdown-item i {
+            width: 20px;
+            margin-right: 10px;
+            color: #833ab4;
+            transition: transform 0.2s ease;
+        }
+        
+        .navbar .dropdown-item:hover i {
+            transform: translateX(2px);
+        }
+        
+        .navbar .dropdown-item:hover,
+        .navbar .dropdown-item:focus {
+            background: #f3f1fa;
+            color: #232323;
+        }
+        
+        .navbar .dropdown-item.active {
+            background: #f3f1fa;
+            color: #232323;
+            font-weight: 600;
+        }
+        
+        .navbar .dropdown-divider {
+            margin: 0.5rem 0;
+            border-top: 1px solid #f0f0f0;
+        }
+        
+        /* Update logout item */
+        .navbar .dropdown-item.logout-item {
+            color: #dc3545;
+        }
+        
+        .navbar .dropdown-item.logout-item i {
+            color: #dc3545;
+        }
+        
+        .navbar .dropdown-item.logout-item:hover {
+            background: #fff1f0;
+        }
+        
+        /* Other styles */
         .card {
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            margin-bottom: 20px;
+            border-radius: 18px;
+            box-shadow: 0 4px 16px rgba(131,58,180,0.08);
+            margin-bottom: 24px;
         }
         
-        .btn-primary {
-            background-color: #3897f0;
-            border-color: #3897f0;
+        .btn-gradient {
+            background: linear-gradient(90deg, #fd1d1d 0%, #833ab4 100%);
+            color: #fff;
+            border: none;
+            border-radius: 30px;
+            font-weight: 600;
+            transition: 0.2s;
         }
         
-        .btn-primary:hover {
-            background-color: #1877f2;
-            border-color: #1877f2;
+        .btn-gradient:hover {
+            background: linear-gradient(90deg, #833ab4 0%, #fd1d1d 100%);
+            color: #fff;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(225, 48, 108, 0.18);
         }
         
-        .form-control:focus {
-            border-color: #3897f0;
-            box-shadow: 0 0 0 0.25rem rgba(56, 151, 240, 0.25);
+        .form-control, .form-select {
+            border-radius: 12px;
+            border: 1px solid #e0e0e0;
+            padding: 12px;
+            transition: all 0.3s;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            box-shadow: 0 0 0 3px rgba(131, 58, 180, 0.12);
+            border-color: #c13584;
+        }
+        
+        .footer {
+            background: linear-gradient(90deg, #833ab4 0%, #fd1d1d 100%);
+        }
+        
+        .footer-logo {
+            max-height: 40px;
+            background: white;
+            padding: 3px;
+            border-radius: 4px;
+        }
+        
+        .social-icons {
+            margin-top: 10px;
+        }
+        
+        .social-icons a {
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            line-height: 32px;
+            text-align: center;
+            border-radius: 50%;
+            background-color: rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .social-icons a:hover {
+            background-color: #fd1d1d;
+            color: #fff;
+            transform: translateY(-3px);
+            text-decoration: none;
         }
     </style>
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg">
         <div class="container">
-            <a class="navbar-brand" href="{{ url_for('main.index') }}">
-                <i class="fab fa-instagram me-2"></i>Instagram Influencer Analyzer
+            <a class="navbar-brand instagram-navbar-brand" href="{{ url_for('main.index') }}">
+                <i class="fab fa-instagram me-2 instagram-navbar-icon"></i>Instagram Influencer Analyzer
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -66,14 +274,57 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.index') }}">Home</a>
+                        <a class="nav-link nav-tab {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}">
+                            <i class="fas fa-home"></i>Home
+                        </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.upload_files') }}">Upload Files</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.dashboard') }}">Dashboard</a>
-                    </li>
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item dropdown">
+                            <a class="nav-link nav-tab dropdown-toggle {% if request.endpoint in ['main.dashboard', 'main.history', 'main.upload_files'] %}active{% endif %}" 
+                               href="#" 
+                               id="userDropdown" 
+                               role="button" 
+                               data-bs-toggle="dropdown" 
+                               aria-expanded="false">
+                                <i class="fas fa-user-circle"></i>
+                                {{ current_user.username }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item {% if request.endpoint == 'main.dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}">
+                                        <i class="fas fa-tachometer-alt"></i>Dashboard
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item {% if request.endpoint == 'main.history' %}active{% endif %}" href="{{ url_for('main.history') }}">
+                                        <i class="fas fa-history"></i>History
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item {% if request.endpoint == 'main.upload_files' %}active{% endif %}" href="{{ url_for('main.upload_files') }}">
+                                        <i class="fas fa-upload"></i>Upload Files
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item logout-item" href="{{ url_for('auth.logout') }}">
+                                        <i class="fas fa-sign-out-alt"></i>Logout
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link nav-tab {% if request.endpoint == 'auth.login' %}active{% endif %}" href="{{ url_for('auth.login') }}">
+                                <i class="fas fa-sign-in-alt"></i>Login
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link nav-tab {% if request.endpoint == 'auth.register' %}active{% endif %}" href="{{ url_for('auth.register') }}">
+                                <i class="fas fa-user-plus"></i>Sign Up
+                            </a>
+                        </li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -84,7 +335,21 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                    <div class="alert alert-custom alert-{{ category }} fade show" role="alert">
+                        <div class="alert-icon">
+                            {% if category == 'success' %}
+                                <i class="fas fa-check-circle"></i>
+                            {% elif category == 'danger' or category == 'error' %}
+                                <i class="fas fa-exclamation-circle"></i>
+                            {% elif category == 'warning' %}
+                                <i class="fas fa-exclamation-triangle"></i>
+                            {% elif category == 'info' %}
+                                <i class="fas fa-info-circle"></i>
+                            {% endif %}
+                        </div>
+                        <div class="alert-content">{{ message }}</div>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
@@ -96,24 +361,20 @@
     </main>
     
     <!-- Footer -->
-    <footer class="bg-dark text-white py-4 mt-5">
+    <footer class="footer py-4 mt-5">
         <div class="container">
             <div class="row align-items-center">
                 <div class="col-md-4">
-                    <h5>Instagram Influencer Analyzer</h5>
-                    <p>A tool for analyzing Instagram influencer profiles and engagement metrics.</p>
+                    <h5 class="footer-heading mb-3">Instagram Influencer Analyzer</h5>
+                    <p class="footer-text">A powerful tool for analyzing Instagram influencer profiles and engagement metrics.</p>
                 </div>
-                <!-- <div class="col-md-4 text-center">
-                    <img src="{{ url_for('static', filename='images/brand/momentro-logo.png') }}" alt="Momentro Logo" class="footer-logo img-fluid mb-2" onerror="this.src='https://via.placeholder.com/150x50?text=Momentro'; this.onerror='';">
-                    <p class="mb-0">Developed by Momentro</p>
-                </div> -->
                 <div class="col-md-8 text-end">
-                    <p>&copy; {{ now().year }} Momentro. All rights reserved.</p>
+                    <p class="footer-copyright mb-2">&copy; {{ now().year }} Momentro. All rights reserved.</p>
                     <div class="social-icons text-end">
-                        <a href="#" class="text-white me-2"><i class="fab fa-facebook-f"></i></a>
-                        <a href="#" class="text-white me-2"><i class="fab fa-twitter"></i></a>
-                        <a href="#" class="text-white me-2"><i class="fab fa-linkedin-in"></i></a>
-                        <a href="#" class="text-white"><i class="fab fa-instagram"></i></a>
+                        <a href="#" class="social-icon"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#" class="social-icon"><i class="fab fa-twitter"></i></a>
+                        <a href="#" class="social-icon"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="#" class="social-icon"><i class="fab fa-instagram"></i></a>
                     </div>
                 </div>
             </div>
@@ -125,32 +386,21 @@
     
     {% block scripts %}{% endblock %}
     {% block extra_js %}{% endblock %}
-    
-    <style>
-        .footer-logo {
-            max-height: 40px;
-            background: white;
-            padding: 3px;
-            border-radius: 4px;
-        }
-        .social-icons {
-            margin-top: 10px;
-        }
-        .social-icons a {
-            display: inline-block;
-            width: 32px;
-            height: 32px;
-            line-height: 32px;
-            text-align: center;
-            border-radius: 50%;
-            background-color: rgba(255,255,255,0.1);
-            transition: all 0.3s ease;
-        }
-        .social-icons a:hover {
-            background-color: rgba(255,255,255,0.2);
-            transform: translateY(-3px);
-            text-decoration: none;
-        }
-    </style>
+
+    <script>
+        // Add active class to current nav item
+        document.addEventListener('DOMContentLoaded', function() {
+            // Subtle animation for social icons on hover
+            const socialIcons = document.querySelectorAll('.social-icon');
+            socialIcons.forEach(icon => {
+                icon.addEventListener('mouseenter', function() {
+                    this.classList.add('icon-hover');
+                });
+                icon.addEventListener('mouseleave', function() {
+                    this.classList.remove('icon-hover');
+                });
+            });
+        });
+    </script>
 </body>
 </html> 

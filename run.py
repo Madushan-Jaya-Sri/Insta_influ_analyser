@@ -3,10 +3,20 @@ import datetime
 from flask import Flask, session, request
 from flask_login import LoginManager
 from flask_session import Session  # Add this import
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv(override=True)
+
+# Initialize extensions globally but without app context initially
+db = SQLAlchemy()
+migrate = Migrate()
+login_manager = LoginManager()
+login_manager.login_view = 'auth.login'
+login_manager.login_message = 'Please log in to access this page.'
+login_manager.login_message_category = 'warning'
 
 def create_app():
     # Define base directory for better path management
@@ -18,6 +28,9 @@ def create_app():
                 static_url_path='/static')
     
     # Configure app
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-please-change') # Use a more descriptive default
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', f'sqlite:///{os.path.join(base_dir, "app.db")}')
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SESSION_TYPE'] = 'filesystem'
     app.config['SESSION_FILE_DIR'] = os.path.join(base_dir, 'app', 'data', 'sessions')
     app.config['SESSION_PERMANENT'] = True
@@ -26,13 +39,15 @@ def create_app():
     app.config['SESSION_COOKIE_SECURE'] = os.getenv('FLASK_ENV') == 'production'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['SESSION_COOKIE_PATH'] = '/'  # Ensure cookie is valid for all routes
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-dev-key')
+    app.config['SESSION_COOKIE_PATH'] = '/'
     app.config['UPLOAD_FOLDER'] = os.path.join(base_dir, 'app', 'uploads')
     app.config['DATA_FOLDER'] = os.path.join(base_dir, 'app', 'data')
     app.config['IMAGES_FOLDER'] = os.path.join(base_dir, 'app', 'static', 'images')
     
-    # Initialize flask-session
+    # Initialize extensions with the app
+    db.init_app(app)
+    migrate.init_app(app, db)
+    login_manager.init_app(app)
     Session(app)
     
     # Ensure folders exist
@@ -40,17 +55,10 @@ def create_app():
         if not os.path.exists(folder):
             os.makedirs(folder)
     
-    # Initialize Flask-Login
-    login_manager = LoginManager()
-    login_manager.init_app(app)
-    login_manager.login_view = 'auth.login'
-    login_manager.login_message = 'Please log in to access this page.'
-    login_manager.login_message_category = 'warning'
-    
     @login_manager.user_loader
     def load_user(user_id):
         from app.models.user import User
-        return User.get_by_id(user_id)
+        return db.session.get(User, int(user_id))
     
     # Add template context processors
     @app.context_processor
@@ -61,6 +69,24 @@ def create_app():
     @app.template_filter('min')
     def min_filter(a, b):
         return min(a, b)
+    
+    @app.template_filter('format_number')
+    def format_number(value):
+        """Format large numbers for display (e.g., 1000 -> 1K, 1000000 -> 1M)"""
+        if value is None:
+            return "0"
+        
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return str(value)
+            
+        if value < 1000:
+            return str(value)
+        elif value < 1000000:
+            return f"{value/1000:.1f}K".replace('.0K', 'K')
+        else:
+            return f"{value/1000000:.1f}M".replace('.0M', 'M')
     
     # Debugging: Log session data
     @app.before_request
@@ -73,10 +99,15 @@ def create_app():
     app.register_blueprint(main_bp)
     
     from app.routes.auth import auth_bp
-    app.register_blueprint(auth_bp)
+    app.register_blueprint(auth_bp, url_prefix='/auth')
+    
+    # Create database tables if they don't exist (for simple setup without full migrations initially)
+    # Consider using Flask-Migrate commands for production/better management
+    with app.app_context():
+        db.create_all()
     
     return app
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='127.0.0.1', port=8002)

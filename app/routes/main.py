@@ -18,6 +18,8 @@ from flask_login import login_required, current_user
 from app.models.forms import URLForm, CountryForm, UploadForm
 from app.models.data_processor import DataProcessor
 from app.models.apify_client_wrapper import ApifyWrapper
+from app.models.history import History
+from run import db
 
 main_bp = Blueprint('main', __name__)
 
@@ -448,28 +450,38 @@ def influencer_api(username):
 @main_bp.route('/history')
 @login_required
 def history():
-    """Display user's analysis history"""
-    data_processor = get_data_processor()
-    runs = data_processor.get_runs_history()
-    
-    return render_template('history.html', runs=runs)
+    """Display user's analysis history from the database"""
+    from app.models.history import History
+    user_history = History.query.filter_by(user_id=current_user.id).order_by(History.timestamp.desc()).all()
+    return render_template('history.html', history=user_history)
 
-@main_bp.route('/history/<run_id>')
+@main_bp.route('/history/<int:history_id>')
 @login_required
-def view_historical_run(run_id):
-    """View a specific historical analysis run"""
+def view_historical_analysis(history_id):
+    """View a specific historical analysis"""
     data_processor = get_data_processor()
     
-    # Attempt to load the historical run
-    if not data_processor.load_run(run_id):
-        flash("Analysis run not found or could not be loaded", "danger")
+    # Attempt to load the historical analysis
+    if not data_processor.load_analysis_from_history(history_id):
+        flash("Analysis not found or could not be loaded", "danger")
         return redirect(url_for('main.history'))
     
     # Get the loaded data
     influencers_data = data_processor.influencers_data
     
+    # Mark as loaded from history
+    from app.models.history import History
+    history_record = History.query.get_or_404(history_id)
+    
     # Render the dashboard with historical data
-    return render_template('dashboard.html', influencers=influencers_data, historical=True, run_id=run_id)
+    return render_template(
+        'dashboard.html', 
+        influencers=influencers_data, 
+        historical=True, 
+        history_id=history_id,
+        profile_username=history_record.profile_username,
+        history_date=history_record.timestamp
+    )
 
 @main_bp.route('/processing')
 @login_required
@@ -718,6 +730,9 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
         
         # Set the analysis complete flag
         set_analysis_complete(True)
+        
+        # Save to history database for later retrieval
+        data_processor.save_to_history_db(time_filter=time_filter, max_posts=max_posts)
         
         update_progress(4, 100, {'visualization': 'complete'}, 'Processing complete!', True)
         

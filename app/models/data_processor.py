@@ -958,3 +958,112 @@ class DataProcessor:
             print(f"Error generating word cloud: {str(e)}")
             traceback.print_exc()
             return None 
+
+    def save_to_history_db(self, time_filter=None, max_posts=None):
+        """Save the analysis results to the database for history tracking"""
+        from app.models.history import History, AnalysisImage
+        from run import db
+
+        if not self.user_id or not self.influencers_data:
+            print("Cannot save to history: missing user_id or influencers_data")
+            return None
+
+        # Create a history record for each influencer analyzed
+        history_records = []
+        
+        for username, data in self.influencers_data.items():
+            try:
+                # Create history record
+                history = History(
+                    user_id=self.user_id,
+                    profile_username=username,
+                    profile_name=data.get('full_name', ''),
+                    profile_url=f"https://instagram.com/{username}/",
+                    profile_follower_count=data.get('follower_count', 0),
+                    profile_post_count=data.get('post_count', 0),
+                    analysis_results=data,
+                    max_posts=max_posts,
+                    time_filter=time_filter,
+                    analysis_complete=True
+                )
+                
+                # Add to database
+                db.session.add(history)
+                db.session.flush()  # This assigns an ID to history without committing
+                
+                # Add profile image if available
+                profile_pic_path = data.get('profile_pic_local_path')
+                if profile_pic_path:
+                    profile_image = AnalysisImage(
+                        history_id=history.id,
+                        image_type='profile',
+                        image_url=data.get('profile_pic_url', ''),
+                        image_path=profile_pic_path
+                    )
+                    db.session.add(profile_image)
+                
+                # Add post images if available
+                if 'posts' in data:
+                    for post in data['posts']:
+                        post_pic_path = post.get('image_local_path')
+                        if post_pic_path:
+                            post_image = AnalysisImage(
+                                history_id=history.id,
+                                image_type='post',
+                                image_url=post.get('display_url', ''),
+                                image_path=post_pic_path,
+                                image_metadata={
+                                    'post_id': post.get('id', ''),
+                                    'shortcode': post.get('shortcode', ''),
+                                    'likes': post.get('likes', 0),
+                                    'comments': post.get('comments', 0)
+                                }
+                            )
+                            db.session.add(post_image)
+                
+                # Add to the list of records
+                history_records.append(history)
+                
+            except Exception as e:
+                print(f"Error saving {username} to history: {str(e)}")
+                continue
+        
+        # Commit all records
+        try:
+            db.session.commit()
+            print(f"Saved {len(history_records)} influencers to history database")
+            return history_records
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error committing history records: {str(e)}")
+            return None
+    
+    def load_analysis_from_history(self, history_id):
+        """Load analysis data from a history record"""
+        from app.models.history import History
+        
+        if not self.user_id:
+            print("Cannot load from history: missing user_id")
+            return False
+            
+        # Find the history record
+        history = History.query.filter_by(id=history_id, user_id=self.user_id).first()
+        if not history:
+            print(f"History record {history_id} not found for user {self.user_id}")
+            return False
+            
+        try:
+            # Load the analysis data
+            username = history.profile_username
+            self.influencers_data = {username: history.analysis_results}
+            
+            # Set country if available
+            if history.analysis_results.get('country'):
+                self.countries[username] = history.analysis_results['country']
+                
+            print(f"Loaded analysis for {username} from history record {history_id}")
+            return True
+            
+        except Exception as e:
+            print(f"Error loading analysis from history: {str(e)}")
+            return False 

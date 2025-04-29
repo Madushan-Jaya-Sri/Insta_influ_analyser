@@ -4,6 +4,9 @@ import time
 import tempfile
 from apify_client import ApifyClient
 import logging
+import dotenv
+
+dotenv.load_dotenv(override= True)
 
 
 class ApifyWrapper:
