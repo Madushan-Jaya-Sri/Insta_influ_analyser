@@ -32,20 +32,56 @@ jobs:
             # Fix ipython version in requirements.txt
             sed -i 's/ipython==9.1.0/ipython==8.18.1/g' requirements.txt
             
-            # Create persistent directories for static files
-            mkdir -p ~/persistent_data/static_files/images/brand
-            
-            # Create a simple placeholder logo
-            echo "Creating placeholder logo files"
-            echo "MOMENTRO" > ~/persistent_data/static_files/images/brand/momentro-logo.png
-            echo "MOMENTRO" > ~/persistent_data/static_files/images/brand/momentro_logo.png
-            
             # Create app static directories
             mkdir -p app/static/images/brand
             
-            # Copy logo files to app directory
-            cp -f ~/persistent_data/static_files/images/brand/momentro-logo.png app/static/images/brand/ || true
-            cp -f ~/persistent_data/static_files/images/brand/momentro_logo.png app/static/images/brand/ || true
+            # Create a simple logo HTML file
+            cat > momentro-logo.html << 'EOF'
+            <html>
+              <head>
+                <style>
+                  body { 
+                    margin: 0; 
+                    background: #fff; 
+                    width: 300px; 
+                    height: 100px; 
+                    display: flex; 
+                    align-items: center; 
+                    justify-content: center; 
+                    font-family: Arial, sans-serif;
+                  }
+                  h1 {
+                    color: #833ab4;
+                    font-size: 24px;
+                  }
+                </style>
+              </head>
+              <body>
+                <h1>MOMENTRO</h1>
+              </body>
+            </html>
+            EOF
+            
+            # Try to install wkhtmltoimage if not available
+            if ! which wkhtmltoimage > /dev/null; then
+              echo "Installing wkhtmltopdf for image generation..."
+              apt-get update && apt-get install -y wkhtmltopdf || true
+            fi
+            
+            # Try to create PNG from HTML file
+            if which wkhtmltoimage > /dev/null; then
+              echo "Generating logo using wkhtmltoimage..."
+              wkhtmltoimage momentro-logo.html app/static/images/brand/momentro-logo.png || echo "Failed to create image"
+            fi
+            
+            # Fallback to a text file if PNG creation failed
+            if [ ! -s app/static/images/brand/momentro-logo.png ]; then
+              echo "Creating placeholder text logo file..."
+              echo "MOMENTRO" > app/static/images/brand/momentro-logo.png
+            fi
+            
+            # Create both variants of the file
+            cp app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png || true
             
             # Create WSGI file
             cat > wsgi.py << 'EOF'
@@ -69,20 +105,13 @@ jobs:
                 app.run()
             EOF
             
-            # Create nginx configuration
+            # Create nginx configuration with better static file handling
             cat > nginx.conf << 'EOF'
             server {
                 listen 80;
                 server_name localhost;
                 
-                location / {
-                    proxy_pass http://127.0.0.1:8000;
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto $scheme;
-                }
-                
+                # Serve static files directly
                 location /static/ {
                     alias /app/app/static/;
                     expires 30d;
@@ -91,6 +120,15 @@ jobs:
                 location /uploads/ {
                     alias /app/app/uploads/;
                     expires 30d;
+                }
+                
+                # Everything else to Flask app
+                location / {
+                    proxy_pass http://127.0.0.1:8000;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
                 }
             }
             EOF
@@ -104,26 +142,26 @@ jobs:
             nginx -t
             service nginx start
             
-            echo "Starting Gunicorn with Flask application..."
+            echo "Setting up static files..."
             cd /app
             
             # Create necessary directories with proper permissions
             mkdir -p app/uploads app/data app/static/images app/static/images/brand
             chmod -R 777 app/uploads app/data app/static/images
             
-            # Ensure both logo files exist
-            if [ -f "app/static/images/brand/momentro-logo.png" ]; then
-              cp -f app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png || true
-            fi
+            # Check logo files (debugging)
+            echo "Logo files in container:"
+            ls -la app/static/images/brand/
             
-            # Fallback if files don't exist
-            if [ ! -f "app/static/images/brand/momentro-logo.png" ]; then
+            # Create logo files if they don't exist
+            if [ ! -s "app/static/images/brand/momentro-logo.png" ]; then
+              echo "Creating momentro-logo.png in container..."
               echo "MOMENTRO" > app/static/images/brand/momentro-logo.png
               echo "MOMENTRO" > app/static/images/brand/momentro_logo.png
             fi
             
             # Start Gunicorn
-            echo "Using wsgi.py with create_app function from run.py"
+            echo "Starting Gunicorn with Flask application..."
             gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level debug --access-logfile - --error-logfile - wsgi:app
             
             # Keep container running
@@ -152,18 +190,15 @@ jobs:
                 pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 && \
                 pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -r requirements.txt --no-deps
 
-            # Copy application code
+            # Copy application code (excluding static files that will be mounted)
             COPY . .
+            
+            # Debug static files
+            RUN find app/static -type f | sort || true
 
-            # Create directories and set permissions
-            RUN mkdir -p app/uploads app/data app/static/images app/static/images/brand && \
-                chmod -R 777 app/uploads app/data app/static/images
-                
-            # Create logo files if they don't exist
-            RUN if [ ! -f "app/static/images/brand/momentro-logo.png" ]; then \
-                  echo "MOMENTRO" > app/static/images/brand/momentro-logo.png; \
-                  echo "MOMENTRO" > app/static/images/brand/momentro_logo.png; \
-                fi
+            # Setup directories
+            RUN mkdir -p app/uploads app/data app/static/images/brand && \
+                chmod -R 777 app/uploads app/data app/static
 
             # Setup start script
             COPY start.sh /start.sh
@@ -186,14 +221,14 @@ jobs:
             docker rm instagram-analyzer || true
             
             echo "Starting new container..."
-            # Run new container
+            # Run new container with ABSOLUTE PATH for static files volume
             docker run -d \
               --name instagram-analyzer \
               -p 80:80 \
               -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
               -e APIFY_API_TOKEN="${{ secrets.APIFY_API_TOKEN }}" \
               -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
-              -v ~/persistent_data/static_files/images/brand:/app/app/static/images/brand \
+              -v $(realpath app/static/images/brand):/app/app/static/images/brand \
               -v instagram_data:/app/app/data \
               -v instagram_uploads:/app/app/uploads \
               --restart unless-stopped \
@@ -203,9 +238,13 @@ jobs:
             # Check if container is running
             docker ps | grep instagram-analyzer
             
-            echo "Showing container logs..."
+            echo "Testing access to the logo..."
+            # Test direct access to logo file
+            sleep 3
+            curl -s http://localhost/static/images/brand/momentro-logo.png | hexdump -C | head
+            
+            echo "Container logs:"
             # Show logs
-            sleep 5
             docker logs instagram-analyzer
             
             echo "Cleaning up unused images..."
