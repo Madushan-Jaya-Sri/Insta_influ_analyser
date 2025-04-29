@@ -55,18 +55,40 @@ jobs:
                 app.run()
             EOF
             
-            # Create brand logo directory and ensure the logo file exists in both naming variations
-            mkdir -p app/static/images/brand
+            # Create persistent directories for static files outside of Docker
+            mkdir -p ~/persistent_data/static_files/images/brand
             
             # Create a simple placeholder logo if the actual logo doesn't exist
-            if [ ! -f "app/static/images/brand/momentro-logo.png" ]; then
-              echo "Creating placeholder logo"
-              # Create a simple text file as placeholder
-              echo "MOMENTRO" > app/static/images/brand/momentro-logo.png
+            if [ ! -f ~/persistent_data/static_files/images/brand/momentro-logo.png ]; then
+              echo "Creating placeholder momentro-logo.png"
+              cat > ~/placeholder.html << EOF
+              <html>
+              <body style="margin:0; background:#fff; width:300px; height:100px; display:flex; align-items:center; justify-content:center; font-family:Arial;">
+                <h1 style="color:#833ab4; font-size:24px;">MOMENTRO</h1>
+              </body>
+              </html>
+              EOF
+              
+              # Try using wkhtmltoimage if available
+              if which wkhtmltoimage > /dev/null; then
+                wkhtmltoimage ~/placeholder.html ~/persistent_data/static_files/images/brand/momentro-logo.png
+              else
+                # If not available, create a simple text file
+                echo "MOMENTRO" > ~/persistent_data/static_files/images/brand/momentro-logo.png
+              fi
             fi
             
             # Create both naming variations of the logo
-            cp app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png || true
+            if [ -f ~/persistent_data/static_files/images/brand/momentro-logo.png ]; then
+              cp ~/persistent_data/static_files/images/brand/momentro-logo.png ~/persistent_data/static_files/images/brand/momentro_logo.png || true
+            fi
+            
+            # Ensure the brand directory exists in our app
+            mkdir -p app/static/images/brand
+            
+            # Copy the logo files from persistent storage to our app
+            cp -f ~/persistent_data/static_files/images/brand/momentro-logo.png app/static/images/brand/ || true
+            cp -f ~/persistent_data/static_files/images/brand/momentro_logo.png app/static/images/brand/ || true
             
             # Create a better nginx configuration to serve the app
             cat > nginx.conf << 'EOF'
@@ -112,7 +134,13 @@ jobs:
             
             # Ensure logo files exist in both naming variations inside container
             if [ -f "app/static/images/brand/momentro-logo.png" ]; then
-              cp app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png || true
+              cp -f app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png || true
+            fi
+            
+            # Additional fallback - create placeholder logo files if they don't exist
+            if [ ! -f "app/static/images/brand/momentro-logo.png" ]; then
+              echo "MOMENTRO" > app/static/images/brand/momentro-logo.png
+              echo "MOMENTRO" > app/static/images/brand/momentro_logo.png
             fi
             
             # Use the wsgi module with the create_app function from run.py
@@ -146,6 +174,9 @@ jobs:
                 pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 && \
                 pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -r requirements.txt --no-deps
 
+            # Create static directories and ensure they exist
+            RUN mkdir -p app/static/images/brand
+
             # Copy application code
             COPY . .
 
@@ -169,8 +200,15 @@ jobs:
                 
             # Ensure both versions of the logo exist
             RUN if [ -f "app/static/images/brand/momentro-logo.png" ]; then \
-                cp app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png || true; \
+                cp -f app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png || true; \
             fi
+
+            # Fallback - create placeholder logo files if they don't exist
+            RUN echo "Creating fallback logo files" && \
+                if [ ! -f "app/static/images/brand/momentro-logo.png" ]; then \
+                  echo "MOMENTRO" > app/static/images/brand/momentro-logo.png; \
+                  echo "MOMENTRO" > app/static/images/brand/momentro_logo.png; \
+                fi
 
             # Make start script executable
             COPY start.sh /start.sh
@@ -190,16 +228,16 @@ jobs:
             docker stop instagram-analyzer || true
             docker rm instagram-analyzer || true
             
-            # Run the new container with environment variables
+            # Run the new container with environment variables and mounting persistent volumes
             docker run -d \
               --name instagram-analyzer \
               -p 80:80 \
               -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
               -e APIFY_API_TOKEN="${{ secrets.APIFY_API_TOKEN }}" \
               -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+              -v ~/persistent_data/static_files/images/brand:/app/app/static/images/brand \
               -v instagram_data:/app/app/data \
               -v instagram_uploads:/app/app/uploads \
-              -v instagram_images:/app/app/static/images \
               --restart unless-stopped \
               instagram-analyzer:latest
             
