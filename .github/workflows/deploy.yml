@@ -205,12 +205,24 @@ jobs:
         
         # Build and deploy with docker-compose
         echo "Building and starting application with Docker Compose..."
-        docker-compose build --no-cache
-        docker-compose up -d
+        docker-compose build --no-cache --progress=plain
         
-        # Quick sanity check - ensure the container is running
-        echo "Verifying container is running..."
-        docker ps | grep insta_analyzer_app || (echo "Container failed to start!" && exit 1)
+        # Check if build was successful
+        if [ $? -eq 0 ]; then
+          echo "Docker build successful, continuing with deployment"
+        else
+          echo "Docker build failed! Printing detailed logs..."
+          docker-compose logs
+          exit 1
+        fi
+        
+        # Start the application with detailed logs
+        docker-compose up -d
+        sleep 10
+        
+        # Print logs immediately to check for startup errors
+        echo "Initial container logs after startup:"
+        docker logs insta_analyzer_app
         
         # Cleanup
         echo "Cleaning up temporary files..."

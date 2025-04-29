@@ -1,9 +1,9 @@
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim as builder
 
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y \
     build-essential \
     libffi-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -11,44 +11,47 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements file
 COPY requirements.txt .
 
-# Install dependencies into a virtual environment
+# Create and activate virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
+# Install dependencies with verbose output
+RUN pip install --no-cache-dir --verbose -r requirements.txt
+RUN pip install --no-cache-dir --verbose gunicorn==21.2.0
+# Explicitly install Flask-Session to ensure it's properly installed
+RUN pip install --no-cache-dir --verbose Flask-Session==0.5.0
 
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy the virtual environment from the builder stage
-COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+# Install sqlite3
+RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
 
-# Install necessary system packages for runtime
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    sqlite3 \
-    && rm -rf /var/lib/apt/lists/*
+# Copy virtual environment from builder stage
+COPY --from=builder /opt/venv /opt/venv
+
+# Set environment variables
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
 COPY . .
 
-# Create necessary directories and set permissions
-RUN mkdir -p /app/app/data/sessions \
-    /app/app/uploads \
-    /app/app/static/images \
-    && chmod -R 755 /app
+# Create necessary directories
+RUN mkdir -p /app/app/data/sessions /app/app/static/uploads \
+    && chmod 755 /app/app/data/sessions /app/app/static/uploads
 
-# Set environment variables
-ENV FLASK_ENV=production \
-    PYTHONUNBUFFERED=1
+# Set environment variables for Flask
+ENV FLASK_APP=run.py
+ENV FLASK_ENV=production
+ENV PYTHONUNBUFFERED=1
 
-# Expose port for the application
+# Expose port
 EXPOSE 8000
 
-# Create a non-root user to run the app
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-RUN chown -R appuser:appuser /app
+# Create a non-root user and give ownership of app directory
+RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Run gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "run:application"] 
+# Command to run the application
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "run:app"] 
