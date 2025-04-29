@@ -37,6 +37,12 @@ jobs:
             echo "Checking application structure..."
             ls -la
             
+            # Examine run.py to find the actual Flask app variable
+            if [ -f "run.py" ]; then
+              echo "Content of run.py:"
+              cat run.py
+            fi
+            
             # Create a better nginx configuration to serve the app
             cat > nginx.conf << 'EOF'
             server {
@@ -63,7 +69,7 @@ jobs:
             }
             EOF
             
-            # Create an improved start script
+            # Create an improved start script that checks for different Flask application structures
             cat > start.sh << 'EOF'
             #!/bin/bash
             set -e
@@ -75,27 +81,100 @@ jobs:
             echo "Starting Gunicorn with Flask application..."
             cd /app
             
-            # Check for Flask app entry point
+            # Helper function to run Flask app
+            run_app() {
+              echo "Running gunicorn with: $1"
+              gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level debug --access-logfile - --error-logfile - "$1"
+            }
+            
+            # Check run.py content to find Flask app variable
             if [ -f "run.py" ]; then
-              echo "Using run.py as entry point"
-              gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level info --access-logfile - --error-logfile - run:app
-            elif [ -f "app.py" ]; then
-              echo "Using app.py as entry point"
-              gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level info --access-logfile - --error-logfile - app:app
-            elif [ -f "wsgi.py" ]; then
-              echo "Using wsgi.py as entry point"
-              gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level info --access-logfile - --error-logfile - wsgi:app
-            elif [ -d "app" ]; then
-              if [ -f "app/__init__.py" ]; then
-                echo "Using app module as entry point"
-                gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level info --access-logfile - --error-logfile - app:app
+              echo "Examining run.py..."
+              # Try to find the Flask app variable
+              APP_VAR=$(grep -E "app.*=.*Flask|application.*=.*Flask" run.py | head -1 | cut -d= -f1 | tr -d ' ')
+              if [ ! -z "$APP_VAR" ]; then
+                echo "Found Flask variable: $APP_VAR"
+                run_app "run:$APP_VAR"
+                exit 0
               fi
-            else
-              echo "Could not find Flask application entry point"
-              exit 1
+              
+              # Check if there's a create_app function
+              if grep -q "def create_app" run.py; then
+                echo "Found create_app function in run.py"
+                run_app "run:create_app()"
+                exit 0
+              fi
             fi
             
-            # Keep the container running
+            # Check app.py
+            if [ -f "app.py" ]; then
+              echo "Examining app.py..."
+              APP_VAR=$(grep -E "app.*=.*Flask|application.*=.*Flask" app.py | head -1 | cut -d= -f1 | tr -d ' ')
+              if [ ! -z "$APP_VAR" ]; then
+                echo "Found Flask variable: $APP_VAR"
+                run_app "app:$APP_VAR"
+                exit 0
+              fi
+              
+              # Check if there's a create_app function
+              if grep -q "def create_app" app.py; then
+                echo "Found create_app function in app.py"
+                run_app "app:create_app()"
+                exit 0
+              fi
+            fi
+            
+            # Check for app package with Flask app in __init__.py
+            if [ -d "app" ] && [ -f "app/__init__.py" ]; then
+              echo "Examining app/__init__.py..."
+              APP_VAR=$(grep -E "app.*=.*Flask|application.*=.*Flask" app/__init__.py | head -1 | cut -d= -f1 | tr -d ' ')
+              if [ ! -z "$APP_VAR" ]; then
+                echo "Found Flask variable in app/__init__.py: $APP_VAR"
+                run_app "app:$APP_VAR"
+                exit 0
+              fi
+              
+              # Check if there's a create_app function
+              if grep -q "def create_app" app/__init__.py; then
+                echo "Found create_app function in app/__init__.py"
+                run_app "app:create_app()"
+                exit 0
+              fi
+            fi
+            
+            # Try some common patterns as last resort
+            echo "Trying common patterns..."
+            if [ -f "run.py" ]; then
+              echo "Trying run:app as fallback..."
+              run_app "run:app" || true
+            elif [ -f "wsgi.py" ]; then
+              echo "Trying wsgi:app as fallback..."
+              run_app "wsgi:app" || true
+            elif [ -d "app" ] && [ -f "app/__init__.py" ]; then
+              echo "Trying app:app as fallback..."
+              PYTHONPATH=/app run_app "app:app" || true
+              echo "Trying module name pattern: app.app as fallback..."
+              PYTHONPATH=/app run_app "app.app:app" || true
+            fi
+            
+            echo "Could not determine Flask application entry point!"
+            echo "Application structure:"
+            find . -type f -name "*.py" | sort
+            
+            echo "Content of key files:"
+            if [ -f "run.py" ]; then
+              echo "=== run.py ==="
+              cat run.py
+              echo "=============="
+            fi
+            
+            if [ -f "app/__init__.py" ]; then
+              echo "=== app/__init__.py ==="
+              cat app/__init__.py
+              echo "======================="
+            fi
+            
+            # Keep the container running for debugging
             tail -f /dev/null
             EOF
             
@@ -106,7 +185,7 @@ jobs:
             FROM python:3.10-slim
 
             # Install Nginx and required packages
-            RUN apt-get update && apt-get install -y nginx procps && rm -rf /var/lib/apt/lists/*
+            RUN apt-get update && apt-get install -y nginx procps grep findutils && rm -rf /var/lib/apt/lists/*
 
             # Copy Nginx config
             COPY nginx.conf /etc/nginx/conf.d/default.conf
