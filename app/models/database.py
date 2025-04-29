@@ -3,6 +3,8 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from datetime import datetime
+from app.models.models import Influencer, Analysis, UserSettings
+from app.models.indexes import *  # Import all indexes
 
 db = SQLAlchemy()
 
@@ -55,7 +57,6 @@ class User(UserMixin, db.Model):
             db.session.commit()
             
             # Create default settings for the user
-            from app.models.models import UserSettings
             UserSettings.get_or_create(user.id)
             
             return user
@@ -81,15 +82,7 @@ def init_db(app):
     try:
         db.init_app(app)
         with app.app_context():
-            # Import models here to avoid circular imports
-            from app.models.models import Influencer, Analysis, UserSettings
-            
-            # Create all tables
             db.create_all()
-            
-            # Apply indexes after table creation
-            import app.models.indexes
-            
             # Create test user if it doesn't exist
             if not User.get_by_username('testuser'):
                 User.create_user(

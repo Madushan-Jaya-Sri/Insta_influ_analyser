@@ -1,34 +1,35 @@
 FROM python:3.11-slim
 
-
 WORKDIR /app
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Install additional dependencies for matplotlib and wordcloud
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    g++ \
-    libffi-dev \
-    libfreetype6-dev \
-    && apt-get clean \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p app/uploads app/data app/static/images/brand app/static/images/profiles app/static/images/posts
+RUN mkdir -p uploads data static app/data/sessions app/uploads app/static
+RUN chmod -R 777 uploads data static app/data app/uploads app/static
 
-# Set environment variables
-ENV FLASK_APP=app.py
-ENV FLASK_ENV=production
+# Environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV FLASK_APP=wsgi.py
+ENV FLASK_ENV=production
 
-# Expose port
-EXPOSE 8000
+# EXPOSE port
+EXPOSE 5000
 
-# Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120", "wsgi:app"] 
+# For debugging purposes, use a direct Python command
+# CMD ["python", "run.py"]
+
+# WSGI entry point with explicit network binding
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "300", "--access-logfile", "-", "--error-logfile", "-", "wsgi:app"] 

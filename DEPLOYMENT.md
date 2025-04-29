@@ -1,144 +1,140 @@
-# Deployment Guide for Instagram Influencer Analyzer
-
-This document provides detailed instructions for deploying the Instagram Influencer Analyzer application to an AWS EC2 instance.
+# Deployment Guide
 
 ## Prerequisites
+- Python 3.9 or higher
+- pip
+- Docker and Docker Compose (for containerized deployment)
+- Nginx (for production deployment)
+- SSL certificates (for HTTPS)
 
-1. AWS Account with EC2 instance created
-2. EC2 instance with Ubuntu Linux distribution
-3. SSH key pair for accessing the EC2 instance
-4. The SSH key file saved at `~/.ssh/insta_analyzer_key.pem`
-5. Python 3.8+ installed on the EC2 instance
-6. Proper security groups configured on the EC2 instance (see `ec2_security_instructions.md`)
+## Deployment Options
 
-## Deployment Steps
-
-### 1. Prepare Local Environment
-
-Before deployment, ensure:
-1. All code changes are committed
-2. Tests are passing
-3. All dependencies are listed in `requirements.txt`
-
-### 2. Run Deployment Script
-
-The application includes a deployment script that automates the process:
-
+### 1. Simple Deployment (Development)
 ```bash
+# Make the deployment script executable
 chmod +x deploy.sh
+
+# Run the deployment script
 ./deploy.sh
 ```
 
-This script performs the following actions:
-- Packages the application code (excluding development files)
-- Transfers the package to the EC2 instance
-- Installs necessary dependencies
-- Sets up the application with Gunicorn as the WSGI server
-- Configures Nginx as a reverse proxy
-- Creates a systemd service for automatic startup
-- Sets appropriate permissions
-
-### 3. Verify Deployment
-
-After deployment, verify the application is running correctly:
-
+### 2. Docker Deployment
 ```bash
-./check_deployment.sh
+# Build and start the containers
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
 ```
 
-This script checks:
-- Application service status
-- Nginx status
-- Application logs
-- Open ports
-
-### 4. Manual Deployment (If Script Fails)
-
-If the script fails, follow these manual steps:
-
-1. SSH into the EC2 instance:
-   ```bash
-   ssh -i ~/.ssh/insta_analyzer_key.pem ubuntu@13.126.220.175
-   ```
-
-2. Create application directory:
-   ```bash
-   mkdir -p ~/insta_influencer_analyzer
-   ```
-
-3. Clone the repository or upload files (if not using the script):
-   ```bash
-   git clone https://github.com/yourusername/Insta_influ_analyser.git ~/insta_influencer_analyzer
-   ```
-
-4. Install dependencies:
-   ```bash
-   cd ~/insta_influencer_analyzer
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   ```
-
-5. Set up systemd service:
-   ```bash
-   sudo cp systemd_service.conf /etc/systemd/system/insta_analyzer.service
-   sudo systemctl daemon-reload
-   sudo systemctl enable insta_analyzer.service
-   sudo systemctl start insta_analyzer.service
-   ```
-
-6. Set up Nginx:
-   ```bash
-   sudo apt-get update
-   sudo apt-get install -y nginx
-   sudo cp nginx_config.conf /etc/nginx/sites-available/insta_analyzer
-   sudo ln -sf /etc/nginx/sites-available/insta_analyzer /etc/nginx/sites-enabled/
-   sudo rm -f /etc/nginx/sites-enabled/default
-   sudo systemctl enable nginx
-   sudo systemctl restart nginx
-   ```
-
-## Maintenance
-
-### Database Backups
-
-Automatic database backups are configured via the `backup_db.sh` script.
-To manually trigger a backup:
-
+### 3. Production Deployment (Systemd)
 ```bash
-./backup_db.sh
+# Copy the application to /opt
+sudo cp -r . /opt/insta-influ-analyser
+
+# Copy the systemd service file
+sudo cp insta-influ-analyser.service /etc/systemd/system/
+
+# Reload systemd
+sudo systemctl daemon-reload
+
+# Start the service
+sudo systemctl start insta-influ-analyser
+
+# Enable automatic startup
+sudo systemctl enable insta-influ-analyser
 ```
 
-### Updating the Application
+## SSL Certificate Setup
+1. Generate SSL certificates:
+```bash
+mkdir -p ssl
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout ssl/key.pem -out ssl/cert.pem
+```
 
-To update the deployed application:
+2. Update Nginx configuration with your domain name
+3. Restart Nginx:
+```bash
+sudo systemctl restart nginx
+```
 
-1. Make and test changes locally
-2. Run the deployment script again:
-   ```bash
-   ./deploy.sh
-   ```
+## Environment Variables
+Create a `.env` file with the following variables:
+```
+FLASK_APP=app
+FLASK_ENV=production
+SECRET_KEY=your-secret-key
+DATABASE_URL=sqlite:///instance/app.db
+```
 
-### Troubleshooting
+## Backup and Maintenance
+1. Database backup:
+```bash
+# Create backup
+cp instance/app.db instance/app.db.backup
 
-Common issues and their solutions:
+# Restore from backup
+cp instance/app.db.backup instance/app.db
+```
 
-1. Application not accessible:
-   - Check security groups in AWS console
-   - Verify nginx and gunicorn services are running
-   - Check application logs with `sudo journalctl -u insta_analyzer.service`
+2. Log rotation:
+```bash
+# Add to /etc/logrotate.d/insta-influ-analyser
+/var/log/insta-influ-analyser/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 www-data www-data
+}
+```
 
-2. Database issues:
-   - Check database permissions
-   - Ensure database path is correctly set in the application config
+## Monitoring
+1. Check service status:
+```bash
+sudo systemctl status insta-influ-analyser
+```
 
-3. Static files not loading:
-   - Check Nginx configuration for the static files location
-   - Ensure proper permissions on static directories
+2. View logs:
+```bash
+sudo journalctl -u insta-influ-analyser -f
+```
 
-### Resources
+## Troubleshooting
+1. Check Nginx error logs:
+```bash
+sudo tail -f /var/log/nginx/error.log
+```
 
-For more information, see:
-- [AWS EC2 Documentation](https://docs.aws.amazon.com/ec2/)
-- [Gunicorn Documentation](https://docs.gunicorn.org/en/stable/)
-- [Nginx Documentation](https://nginx.org/en/docs/) 
+2. Check application logs:
+```bash
+sudo journalctl -u insta-influ-analyser -f
+```
+
+3. Check Docker logs:
+```bash
+docker-compose logs -f
+```
+
+## Security Considerations
+1. Keep all software up to date
+2. Use strong passwords
+3. Regularly backup the database
+4. Monitor system logs
+5. Use HTTPS only
+6. Implement rate limiting
+7. Regular security audits
+
+## Performance Optimization
+1. Enable Gzip compression
+2. Use browser caching
+3. Optimize database queries
+4. Implement caching where appropriate
+5. Use CDN for static files
+
+## Contact
+
+For support, please reach out to the development team. 
