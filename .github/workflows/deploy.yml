@@ -19,15 +19,15 @@ jobs:
           key: ${{ secrets.AWS_SSH_KEY }}
           script: |
             # Create app directory if it doesn't exist
-            mkdir -p ~/instagram-analyzer
+            mkdir -p ~/Insta_influ_analyser
 
             # Clone or pull the latest code
-            if [ -d "~/instagram-analyzer/.git" ]; then
-              cd ~/instagram-analyzer
+            if [ -d "~/Insta_influ_analyser/.git" ]; then
+              cd ~/Insta_influ_analyser
               git pull
             else
-              git clone https://github.com/${{ github.repository }} ~/instagram-analyzer
-              cd ~/instagram-analyzer
+              git clone https://github.com/madushan-jaya-sri/Insta_influ_analyser.git ~/Insta_influ_analyser
+              cd ~/Insta_influ_analyser
             fi
             
             # Build the Docker image locally
