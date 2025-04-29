@@ -37,11 +37,44 @@ jobs:
             echo "Checking application structure..."
             ls -la
             
-            # Examine run.py to find the actual Flask app variable
+            # Examine run.py to find where the app is imported from
             if [ -f "run.py" ]; then
               echo "Content of run.py:"
               cat run.py
             fi
+            
+            # Create a WSGI file that properly imports the Flask application
+            cat > wsgi.py << 'EOF'
+            #!/usr/bin/env python3
+            import os
+            import sys
+
+            # Add the current directory to the path
+            sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
+            # Import the Flask app from the app package
+            try:
+                from app import app as application
+            except ImportError:
+                try:
+                    from app.app import app as application
+                except ImportError:
+                    try:
+                        import run
+                        from run import app as application
+                    except (ImportError, AttributeError):
+                        try:
+                            from app import create_app
+                            application = create_app()
+                        except ImportError:
+                            raise ImportError("Could not import Flask application. Make sure 'app' is defined somewhere in your project.")
+
+            # For Gunicorn
+            app = application
+
+            if __name__ == "__main__":
+                app.run()
+            EOF
             
             # Create a better nginx configuration to serve the app
             cat > nginx.conf << 'EOF'
@@ -69,7 +102,7 @@ jobs:
             }
             EOF
             
-            # Create an improved start script that checks for different Flask application structures
+            # Create a simpler start script that uses the newly created wsgi.py
             cat > start.sh << 'EOF'
             #!/bin/bash
             set -e
@@ -81,98 +114,9 @@ jobs:
             echo "Starting Gunicorn with Flask application..."
             cd /app
             
-            # Helper function to run Flask app
-            run_app() {
-              echo "Running gunicorn with: $1"
-              gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level debug --access-logfile - --error-logfile - "$1"
-            }
-            
-            # Check run.py content to find Flask app variable
-            if [ -f "run.py" ]; then
-              echo "Examining run.py..."
-              # Try to find the Flask app variable
-              APP_VAR=$(grep -E "app.*=.*Flask|application.*=.*Flask" run.py | head -1 | cut -d= -f1 | tr -d ' ')
-              if [ ! -z "$APP_VAR" ]; then
-                echo "Found Flask variable: $APP_VAR"
-                run_app "run:$APP_VAR"
-                exit 0
-              fi
-              
-              # Check if there's a create_app function
-              if grep -q "def create_app" run.py; then
-                echo "Found create_app function in run.py"
-                run_app "run:create_app()"
-                exit 0
-              fi
-            fi
-            
-            # Check app.py
-            if [ -f "app.py" ]; then
-              echo "Examining app.py..."
-              APP_VAR=$(grep -E "app.*=.*Flask|application.*=.*Flask" app.py | head -1 | cut -d= -f1 | tr -d ' ')
-              if [ ! -z "$APP_VAR" ]; then
-                echo "Found Flask variable: $APP_VAR"
-                run_app "app:$APP_VAR"
-                exit 0
-              fi
-              
-              # Check if there's a create_app function
-              if grep -q "def create_app" app.py; then
-                echo "Found create_app function in app.py"
-                run_app "app:create_app()"
-                exit 0
-              fi
-            fi
-            
-            # Check for app package with Flask app in __init__.py
-            if [ -d "app" ] && [ -f "app/__init__.py" ]; then
-              echo "Examining app/__init__.py..."
-              APP_VAR=$(grep -E "app.*=.*Flask|application.*=.*Flask" app/__init__.py | head -1 | cut -d= -f1 | tr -d ' ')
-              if [ ! -z "$APP_VAR" ]; then
-                echo "Found Flask variable in app/__init__.py: $APP_VAR"
-                run_app "app:$APP_VAR"
-                exit 0
-              fi
-              
-              # Check if there's a create_app function
-              if grep -q "def create_app" app/__init__.py; then
-                echo "Found create_app function in app/__init__.py"
-                run_app "app:create_app()"
-                exit 0
-              fi
-            fi
-            
-            # Try some common patterns as last resort
-            echo "Trying common patterns..."
-            if [ -f "run.py" ]; then
-              echo "Trying run:app as fallback..."
-              run_app "run:app" || true
-            elif [ -f "wsgi.py" ]; then
-              echo "Trying wsgi:app as fallback..."
-              run_app "wsgi:app" || true
-            elif [ -d "app" ] && [ -f "app/__init__.py" ]; then
-              echo "Trying app:app as fallback..."
-              PYTHONPATH=/app run_app "app:app" || true
-              echo "Trying module name pattern: app.app as fallback..."
-              PYTHONPATH=/app run_app "app.app:app" || true
-            fi
-            
-            echo "Could not determine Flask application entry point!"
-            echo "Application structure:"
-            find . -type f -name "*.py" | sort
-            
-            echo "Content of key files:"
-            if [ -f "run.py" ]; then
-              echo "=== run.py ==="
-              cat run.py
-              echo "=============="
-            fi
-            
-            if [ -f "app/__init__.py" ]; then
-              echo "=== app/__init__.py ==="
-              cat app/__init__.py
-              echo "======================="
-            fi
+            # Straight to the point - use our new wsgi.py file
+            echo "Using wsgi.py as the WSGI entry point"
+            gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level debug --access-logfile - --error-logfile - wsgi:app
             
             # Keep the container running for debugging
             tail -f /dev/null
