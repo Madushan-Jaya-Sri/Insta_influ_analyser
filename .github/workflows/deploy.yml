@@ -33,15 +33,85 @@ jobs:
             # Fix ipython version in requirements.txt before building
             sed -i 's/ipython==9.1.0/ipython==8.18.1/g' requirements.txt
             
+            # Find the correct app module by checking the directory structure
+            echo "Checking application structure..."
+            ls -la
+            
+            # Create a better nginx configuration to serve the app
+            cat > nginx.conf << 'EOF'
+            server {
+                listen 80;
+                server_name localhost;
+                
+                location / {
+                    proxy_pass http://127.0.0.1:8000;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+                
+                location /static/ {
+                    alias /app/app/static/;
+                    expires 30d;
+                }
+                
+                location /uploads/ {
+                    alias /app/app/uploads/;
+                    expires 30d;
+                }
+            }
+            EOF
+            
+            # Create an improved start script
+            cat > start.sh << 'EOF'
+            #!/bin/bash
+            set -e
+            
+            echo "Starting Nginx..."
+            nginx -t
+            service nginx start
+            
+            echo "Starting Gunicorn with Flask application..."
+            cd /app
+            
+            # Check for Flask app entry point
+            if [ -f "run.py" ]; then
+              echo "Using run.py as entry point"
+              gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level info --access-logfile - --error-logfile - run:app
+            elif [ -f "app.py" ]; then
+              echo "Using app.py as entry point"
+              gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level info --access-logfile - --error-logfile - app:app
+            elif [ -f "wsgi.py" ]; then
+              echo "Using wsgi.py as entry point"
+              gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level info --access-logfile - --error-logfile - wsgi:app
+            elif [ -d "app" ]; then
+              if [ -f "app/__init__.py" ]; then
+                echo "Using app module as entry point"
+                gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level info --access-logfile - --error-logfile - app:app
+              fi
+            else
+              echo "Could not find Flask application entry point"
+              exit 1
+            fi
+            
+            # Keep the container running
+            tail -f /dev/null
+            EOF
+            
+            chmod +x start.sh
+
             # Create a simplified Dockerfile for improved compatibility
             cat > Dockerfile.simple << 'EOF'
             FROM python:3.10-slim
 
             # Install Nginx and required packages
-            RUN apt-get update && apt-get install -y nginx && rm -rf /var/lib/apt/lists/*
+            RUN apt-get update && apt-get install -y nginx procps && rm -rf /var/lib/apt/lists/*
 
             # Copy Nginx config
             COPY nginx.conf /etc/nginx/conf.d/default.conf
+            # Remove default nginx site
+            RUN rm -f /etc/nginx/sites-enabled/default
 
             # Set working directory
             WORKDIR /app
@@ -54,6 +124,10 @@ jobs:
 
             # Copy application code
             COPY . .
+
+            # Make sure the uploads and data directories exist
+            RUN mkdir -p app/uploads app/data app/static/images && \
+                chmod -R 777 app/uploads app/data app/static/images
 
             # Make start script executable
             COPY start.sh /start.sh
@@ -88,6 +162,10 @@ jobs:
             
             # Check if container is running
             docker ps | grep instagram-analyzer
+            
+            # Show container logs to help with debugging
+            sleep 5
+            docker logs instagram-analyzer
             
             # Remove unused images to save space
             docker image prune -af --filter "until=24h" 
