@@ -25,43 +25,18 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
     
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-      
-    - name: Login to DockerHub
-      uses: docker/login-action@v2
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-    
     - name: Set environment variables
       id: env_vars
       run: |
-        # Set Docker image name and tag
-        echo "IMAGE_NAME=yourusername/insta-influencer-analyzer" >> $GITHUB_ENV
-        
-        # Set tag based on branch/ref
+        # Set environment based on branch/ref
         if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event.inputs.environment }}" == "production" ]]; then
-          echo "TAG=latest" >> $GITHUB_ENV
           echo "ENV=production" >> $GITHUB_ENV
         else
-          echo "TAG=develop" >> $GITHUB_ENV
           echo "ENV=staging" >> $GITHUB_ENV
         fi
         
-        # Set deployment timestamp
+        # Set timestamp for version tracking
         echo "TIMESTAMP=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
-        
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        push: true
-        tags: |
-          ${{ env.IMAGE_NAME }}:${{ env.TAG }}
-          ${{ env.IMAGE_NAME }}:${{ env.TIMESTAMP }}
-        cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:${{ env.TAG }}
-        cache-to: type=inline
         
     - name: Set up SSH key
       uses: webfactory/ssh-agent@v0.7.0
@@ -73,6 +48,15 @@ jobs:
         EC2_HOST: ${{ secrets.AWS_HOST }}
         EC2_USER: ${{ secrets.AWS_USERNAME }}
       run: |
+        # Create archive of application code (excluding unnecessary files)
+        tar --exclude="venv" --exclude=".git" --exclude="__pycache__" \
+            --exclude="*.pyc" --exclude=".env" --exclude=".env.*" \
+            --exclude="*.db" --exclude="app/data/sessions" \
+            -czf /tmp/app.tar.gz .
+            
+        # Transfer application code to EC2
+        scp -o StrictHostKeyChecking=no /tmp/app.tar.gz $EC2_USER@$EC2_HOST:/tmp/app.tar.gz
+        
         # Create deployment script
         cat > deploy_script.sh << 'EOF'
         #!/bin/bash
@@ -81,6 +65,9 @@ jobs:
         # Create application directory if it doesn't exist
         mkdir -p ~/insta_influencer_analyzer
         cd ~/insta_influencer_analyzer
+        
+        # Extract the application code
+        tar -xzf /tmp/app.tar.gz -C .
         
         # Create docker-compose directory if it doesn't exist
         mkdir -p ./nginx/ssl
@@ -99,7 +86,9 @@ jobs:
         
         services:
           app:
-            image: ${{ env.IMAGE_NAME }}:${{ env.TAG }}
+            build:
+              context: .
+              dockerfile: Dockerfile
             container_name: insta_analyzer_app
             restart: always
             expose:
@@ -169,16 +158,15 @@ jobs:
         }
         EOT
         
-        # Pull the latest image
-        docker pull ${{ env.IMAGE_NAME }}:${{ env.TAG }}
-        
-        # Deploy with docker-compose
+        # Build and deploy with docker-compose
         docker-compose down
+        docker-compose build --no-cache
         docker-compose up -d
         
         # Cleanup
         docker system prune -af --volumes
         docker image prune -af
+        rm -f /tmp/app.tar.gz
         EOF
         
         # Transfer and execute the deployment script
