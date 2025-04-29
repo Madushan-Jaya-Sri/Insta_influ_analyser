@@ -18,87 +18,58 @@ jobs:
           username: ${{ secrets.AWS_USERNAME }}
           key: ${{ secrets.AWS_SSH_KEY }}
           script: |
-            # Create app directory if it doesn't exist
-            mkdir -p ~/Insta_influ_analyser
-
-            # Clone or update the repository, handling any local changes
-            if [ -d ~/Insta_influ_analyser/.git ]; then
-              # If repo exists, handle potential merge conflicts
-              cd ~/Insta_influ_analyser
-              # Stash any local changes that might conflict
-              git stash -u || true
-              # Force pull the latest changes from main branch
-              git fetch origin
-              git reset --hard origin/main
-              echo "Repository updated to latest main branch"
-            else
-              # Clone the repository if it doesn't exist
-              git clone https://github.com/madushan-jaya-sri/Insta_influ_analyser.git ~/Insta_influ_analyser
-              cd ~/Insta_influ_analyser
-              echo "Repository cloned successfully"
-            fi
+            echo "Starting deployment process..."
             
-            # Fix ipython version in requirements.txt before building
+            # Remove existing directory entirely for a clean start
+            rm -rf ~/Insta_influ_analyser
+            echo "Removed existing repository directory"
+            
+            # Fresh clone of the repository
+            git clone https://github.com/madushan-jaya-sri/Insta_influ_analyser.git ~/Insta_influ_analyser
+            cd ~/Insta_influ_analyser
+            echo "Repository freshly cloned"
+            
+            # Fix ipython version in requirements.txt
             sed -i 's/ipython==9.1.0/ipython==8.18.1/g' requirements.txt
             
-            # Create a WSGI file that properly uses the create_app function from run.py
+            # Create persistent directories for static files
+            mkdir -p ~/persistent_data/static_files/images/brand
+            
+            # Create a simple placeholder logo
+            echo "Creating placeholder logo files"
+            echo "MOMENTRO" > ~/persistent_data/static_files/images/brand/momentro-logo.png
+            echo "MOMENTRO" > ~/persistent_data/static_files/images/brand/momentro_logo.png
+            
+            # Create app static directories
+            mkdir -p app/static/images/brand
+            
+            # Copy logo files to app directory
+            cp -f ~/persistent_data/static_files/images/brand/momentro-logo.png app/static/images/brand/ || true
+            cp -f ~/persistent_data/static_files/images/brand/momentro_logo.png app/static/images/brand/ || true
+            
+            # Create WSGI file
             cat > wsgi.py << 'EOF'
             #!/usr/bin/env python3
             import os
             import sys
-
+            
             # Add the current directory to the path
             sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-
+            
             # Import the create_app function from run.py
             from run import create_app
-
+            
             # Create the application instance
             application = create_app()
             
             # For Gunicorn
             app = application
-
+            
             if __name__ == "__main__":
                 app.run()
             EOF
             
-            # Create persistent directories for static files outside of Docker
-            mkdir -p ~/persistent_data/static_files/images/brand
-            
-            # Create a simple placeholder logo if the actual logo doesn't exist
-            if [ ! -f ~/persistent_data/static_files/images/brand/momentro-logo.png ]; then
-              echo "Creating placeholder momentro-logo.png"
-              cat > ~/placeholder.html << EOF
-              <html>
-              <body style="margin:0; background:#fff; width:300px; height:100px; display:flex; align-items:center; justify-content:center; font-family:Arial;">
-                <h1 style="color:#833ab4; font-size:24px;">MOMENTRO</h1>
-              </body>
-              </html>
-              EOF
-              
-              # Try using wkhtmltoimage if available
-              if which wkhtmltoimage > /dev/null; then
-                wkhtmltoimage ~/placeholder.html ~/persistent_data/static_files/images/brand/momentro-logo.png
-              else
-                # If not available, create a simple text file
-                echo "MOMENTRO" > ~/persistent_data/static_files/images/brand/momentro-logo.png
-              fi
-            fi
-            
-            # Create both naming variations of the logo
-            if [ -f ~/persistent_data/static_files/images/brand/momentro-logo.png ]; then
-              cp ~/persistent_data/static_files/images/brand/momentro-logo.png ~/persistent_data/static_files/images/brand/momentro_logo.png || true
-            fi
-            
-            # Ensure the brand directory exists in our app
-            mkdir -p app/static/images/brand
-            
-            # Copy the logo files from persistent storage to our app
-            cp -f ~/persistent_data/static_files/images/brand/momentro-logo.png app/static/images/brand/ || true
-            cp -f ~/persistent_data/static_files/images/brand/momentro_logo.png app/static/images/brand/ || true
-            
-            # Create a better nginx configuration to serve the app
+            # Create nginx configuration
             cat > nginx.conf << 'EOF'
             server {
                 listen 80;
@@ -124,7 +95,7 @@ jobs:
             }
             EOF
             
-            # Create a simpler start script that uses the newly created wsgi.py
+            # Create start script
             cat > start.sh << 'EOF'
             #!/bin/bash
             set -e
@@ -140,85 +111,61 @@ jobs:
             mkdir -p app/uploads app/data app/static/images app/static/images/brand
             chmod -R 777 app/uploads app/data app/static/images
             
-            # Ensure logo files exist in both naming variations inside container
+            # Ensure both logo files exist
             if [ -f "app/static/images/brand/momentro-logo.png" ]; then
               cp -f app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png || true
             fi
             
-            # Additional fallback - create placeholder logo files if they don't exist
+            # Fallback if files don't exist
             if [ ! -f "app/static/images/brand/momentro-logo.png" ]; then
               echo "MOMENTRO" > app/static/images/brand/momentro-logo.png
               echo "MOMENTRO" > app/static/images/brand/momentro_logo.png
             fi
             
-            # Use the wsgi module with the create_app function from run.py
+            # Start Gunicorn
             echo "Using wsgi.py with create_app function from run.py"
             gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level debug --access-logfile - --error-logfile - wsgi:app
             
-            # Keep the container running for debugging
+            # Keep container running
             tail -f /dev/null
             EOF
             
             chmod +x start.sh
-
-            # Create a simplified Dockerfile for improved compatibility
+            
+            # Create simplified Dockerfile
             cat > Dockerfile.simple << 'EOF'
             FROM python:3.10-slim
 
-            # Install Nginx and required packages
+            # Install required packages
             RUN apt-get update && apt-get install -y nginx procps grep findutils && rm -rf /var/lib/apt/lists/*
 
             # Copy Nginx config
             COPY nginx.conf /etc/nginx/conf.d/default.conf
-            # Remove default nginx site
             RUN rm -f /etc/nginx/sites-enabled/default
 
             # Set working directory
             WORKDIR /app
 
-            # Update pip and install dependencies
+            # Install dependencies
             COPY requirements.txt .
             RUN pip install --upgrade pip && \
                 pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 && \
                 pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -r requirements.txt --no-deps
 
-            # Create static directories and ensure they exist
-            RUN mkdir -p app/static/images/brand
-
             # Copy application code
             COPY . .
 
-            # Create wsgi.py and wsgi module with correct imports
-            RUN if [ ! -f "wsgi.py" ]; then \
-                echo "Creating wsgi.py"; \
-                echo '#!/usr/bin/env python3' > wsgi.py; \
-                echo 'import os' >> wsgi.py; \
-                echo 'import sys' >> wsgi.py; \
-                echo 'sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))' >> wsgi.py; \
-                echo 'from run import create_app' >> wsgi.py; \
-                echo 'application = create_app()' >> wsgi.py; \
-                echo 'app = application' >> wsgi.py; \
-                echo 'if __name__ == "__main__":' >> wsgi.py; \
-                echo '    app.run()' >> wsgi.py; \
-            fi
-
-            # Make sure the uploads and data directories exist
+            # Create directories and set permissions
             RUN mkdir -p app/uploads app/data app/static/images app/static/images/brand && \
                 chmod -R 777 app/uploads app/data app/static/images
                 
-            # Ensure both versions of the logo exist
-            RUN if [ -f "app/static/images/brand/momentro-logo.png" ]; then \
-                cp -f app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png || true; \
-            fi
-
-            # Fallback - create placeholder logo files if they don't exist
-            RUN echo "Creating fallback logo files" && \
-                if [ ! -f "app/static/images/brand/momentro-logo.png" ]; then \
+            # Create logo files if they don't exist
+            RUN if [ ! -f "app/static/images/brand/momentro-logo.png" ]; then \
                   echo "MOMENTRO" > app/static/images/brand/momentro-logo.png; \
                   echo "MOMENTRO" > app/static/images/brand/momentro_logo.png; \
                 fi
 
-            # Make start script executable
+            # Setup start script
             COPY start.sh /start.sh
             RUN chmod +x /start.sh
 
@@ -229,14 +176,17 @@ jobs:
             CMD ["/start.sh"]
             EOF
             
-            # Build the Docker image using the simplified Dockerfile
+            echo "Building Docker image..."
+            # Build Docker image
             docker build -t instagram-analyzer:latest -f Dockerfile.simple .
             
-            # Stop and remove the existing container if it's running
+            echo "Stopping and removing existing container if it exists..."
+            # Stop and remove existing container
             docker stop instagram-analyzer || true
             docker rm instagram-analyzer || true
             
-            # Run the new container with environment variables and mounting persistent volumes
+            echo "Starting new container..."
+            # Run new container
             docker run -d \
               --name instagram-analyzer \
               -p 80:80 \
@@ -249,12 +199,17 @@ jobs:
               --restart unless-stopped \
               instagram-analyzer:latest
             
+            echo "Checking if container is running..."
             # Check if container is running
             docker ps | grep instagram-analyzer
             
-            # Show container logs to help with debugging
+            echo "Showing container logs..."
+            # Show logs
             sleep 5
             docker logs instagram-analyzer
             
-            # Remove unused images to save space
-            docker image prune -af --filter "until=24h" 
+            echo "Cleaning up unused images..."
+            # Clean up unused images
+            docker image prune -af --filter "until=24h"
+            
+            echo "Deployment completed." 
