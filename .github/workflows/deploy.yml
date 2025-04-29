@@ -56,21 +56,7 @@ jobs:
         echo "=== Starting thorough Docker environment cleanup ==="
         
         # Kill any processes that might be using our ports
-        echo "Checking for processes using port 8000..."
-        # Use true to ensure command doesn't fail if no process found
-        sudo lsof -i :8000 | grep LISTEN || true
-        # Kill processes more safely by checking if there are any first
-        if sudo lsof -t -i:8000 > /dev/null 2>&1; then
-          echo "Found processes using port 8000, killing them..."
-          sudo kill -9 $(sudo lsof -t -i:8000)
-        else
-          echo "No processes found using port 8000"
-        fi
-        
         echo "Checking for processes using port 80..."
-        # Use true to ensure command doesn't fail if no process found
-        sudo lsof -i :80 | grep LISTEN || true
-        # Kill processes more safely by checking if there are any first
         if sudo lsof -t -i:80 > /dev/null 2>&1; then
           echo "Found processes using port 80, killing them..."
           sudo kill -9 $(sudo lsof -t -i:80)
@@ -78,29 +64,27 @@ jobs:
           echo "No processes found using port 80"
         fi
         
-        # Stop existing docker containers
-        echo "Stopping all Docker containers..."
-        if [ -n "$(docker ps -q)" ]; then
-          docker stop $(docker ps -q)
+        echo "Checking for processes using port 8000..."
+        if sudo lsof -t -i:8000 > /dev/null 2>&1; then
+          echo "Found processes using port 8000, killing them..."
+          sudo kill -9 $(sudo lsof -t -i:8000)
         else
-          echo "No running containers to stop"
+          echo "No processes found using port 8000"
         fi
         
-        # Remove existing docker containers
+        # Stop and remove all Docker containers
+        echo "Stopping all Docker containers..."
+        docker stop $(docker ps -aq) 2>/dev/null || true
         echo "Removing all Docker containers..."
-        if [ -n "$(docker ps -aq)" ]; then
-          docker rm -f $(docker ps -aq)
-        else
-          echo "No containers to remove"
-        fi
+        docker rm -f $(docker ps -aq) 2>/dev/null || true
         
         # Remove specific container names that might exist
         echo "Ensuring specific containers are removed..."
-        docker rm -f insta_analyzer_app nginx flask_app 2>/dev/null || echo "No specific containers to remove"
+        docker rm -f insta_analyzer_app nginx flask_app 2>/dev/null || true
         
-        # Remove nginx at system level
+        # Stop system Nginx if running
         echo "Stopping system Nginx service..."
-        sudo systemctl stop nginx 2>/dev/null || echo "Nginx service not running"
+        sudo systemctl stop nginx 2>/dev/null || true
         
         # Remove previous application data
         echo "Removing previous application directories..."
@@ -130,7 +114,7 @@ jobs:
         EC2_HOST: ${{ secrets.AWS_HOST }}
         EC2_USER: ${{ secrets.AWS_USERNAME }}
       run: |
-        # Create archive of application code (excluding unnecessary files)
+        # Create archive of application code
         tar --exclude="venv" --exclude=".git" --exclude="__pycache__" \
             --exclude="*.pyc" --exclude=".env" --exclude=".env.*" \
             --exclude="*.db" --exclude="app/data/sessions" \
@@ -164,65 +148,25 @@ jobs:
         APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}
         EOT
         
-        # Create or update docker-compose file
-        echo "Creating Docker Compose configuration..."
-        cat > docker-compose.yml << EOT
-        version: '3.8'
-        
-        services:
-          app:
-            build:
-              context: .
-              dockerfile: Dockerfile
-            container_name: insta_analyzer_app
-            restart: always
-            ports:
-              - "8000:8000"
-            volumes:
-              - app_data:/app/app/data
-              - app_uploads:/app/app/uploads
-              - app_static:/app/app/static/images
-            env_file:
-              - .env
-            healthcheck:
-              test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-              interval: 30s
-              timeout: 10s
-              retries: 3
-        
-        volumes:
-          app_data:
-            driver: local
-          app_uploads:
-            driver: local
-          app_static:
-            driver: local
-        EOT
-        
-        # Double-check no containers are running
-        echo "Ensuring no containers with same names are running..."
-        docker rm -f insta_analyzer_app 2>/dev/null || true
-        
-        # Build and deploy with docker-compose
+        # Build and start the application
         echo "Building and starting application with Docker Compose..."
-        docker-compose build --no-cache --progress=plain
+        docker-compose -f docker-compose.prod.yml up -d --build
         
-        # Check if build was successful
-        if [ $? -eq 0 ]; then
-          echo "Docker build successful, continuing with deployment"
-        else
-          echo "Docker build failed! Printing detailed logs..."
-          docker-compose logs
-          exit 1
-        fi
+        # Wait for services to start
+        echo "Waiting for services to start..."
+        sleep 30
         
-        # Start the application with detailed logs
-        docker-compose up -d
-        sleep 10
+        # Check if Nginx is running
+        echo "Checking Nginx status..."
+        docker ps | grep nginx || echo "Nginx container not found"
         
-        # Print logs immediately to check for startup errors
-        echo "Initial container logs after startup:"
-        docker logs insta_analyzer_app
+        # Check if web service is running
+        echo "Checking web service status..."
+        docker ps | grep web || echo "Web container not found"
+        
+        # Print container logs
+        echo "Container logs:"
+        docker-compose -f docker-compose.prod.yml logs --tail=50
         
         # Cleanup
         echo "Cleaning up temporary files..."
@@ -236,7 +180,7 @@ jobs:
         scp -o StrictHostKeyChecking=no deploy_script.sh $EC2_USER@$EC2_HOST:~/deploy_script.sh
         ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "chmod +x ~/deploy_script.sh && ~/deploy_script.sh && rm ~/deploy_script.sh"
 
-    - name: Verify deployment and check logs
+    - name: Verify deployment
       env:
         EC2_HOST: ${{ secrets.AWS_HOST }}
         EC2_USER: ${{ secrets.AWS_USERNAME }}
@@ -247,11 +191,14 @@ jobs:
         echo "=== Container status ==="
         ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "docker ps -a"
         
-        echo "=== Container logs ==="
-        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "docker logs insta_analyzer_app --tail 50 || echo 'No logs found'"
+        echo "=== Nginx container logs ==="
+        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "docker logs nginx --tail 50 || echo 'No Nginx logs found'"
+        
+        echo "=== Web container logs ==="
+        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "docker logs web --tail 50 || echo 'No web logs found'"
         
         echo "=== Application health check ==="
-        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "curl -s http://localhost:8000/health || echo 'Health check failed'"
+        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "curl -s http://localhost:80 || echo 'Health check failed'"
         
         echo "✅ Deployment verification complete!"
-        echo "Your application should be accessible at: http://${{ secrets.AWS_HOST }}:8000" 
+        echo "Your application should be accessible at: http://${{ secrets.AWS_HOST }}" 
