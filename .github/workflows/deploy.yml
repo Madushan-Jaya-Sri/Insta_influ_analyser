@@ -21,13 +21,21 @@ jobs:
             # Create app directory if it doesn't exist
             mkdir -p ~/Insta_influ_analyser
 
-            # Clone or pull the latest code
+            # Clone or update the repository, handling any local changes
             if [ -d ~/Insta_influ_analyser/.git ]; then
+              # If repo exists, handle potential merge conflicts
               cd ~/Insta_influ_analyser
-              git pull
+              # Stash any local changes that might conflict
+              git stash -u || true
+              # Force pull the latest changes from main branch
+              git fetch origin
+              git reset --hard origin/main
+              echo "Repository updated to latest main branch"
             else
+              # Clone the repository if it doesn't exist
               git clone https://github.com/madushan-jaya-sri/Insta_influ_analyser.git ~/Insta_influ_analyser
               cd ~/Insta_influ_analyser
+              echo "Repository cloned successfully"
             fi
             
             # Fix ipython version in requirements.txt before building
