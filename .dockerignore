@@ -1,7 +1,7 @@
-# Version control
+# Git
 .git
 .gitignore
-.github
+.github/
 
 # Python
 __pycache__/
@@ -9,30 +9,36 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
 venv/
-.venv/
-ENV/
+env/
+.env
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
 
 # Docker
-.dockerignore
 Dockerfile
-docker-compose.yml
-docker-compose.prod.yml
+docker-compose*.yml
+.dockerignore
+
+# Application data
+app/data/*
+!app/data/.gitkeep
+app/uploads/*
+!app/uploads/.gitkeep
+app/static/images/*
+!app/static/images/.gitkeep
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
 
 # Deployment scripts
 scripts/
@@ -43,12 +49,6 @@ certbot/
 data/
 uploads/
 static/
-
-# IDE files
-.idea/
-.vscode/
-*.swp
-*.swo
 
 # Development and test files
 *.log

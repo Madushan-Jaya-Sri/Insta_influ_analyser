@@ -2,7 +2,7 @@ import os
 import datetime
 from flask import Flask, session, request
 from flask_login import LoginManager
-from flask_session import Session  # Add this import
+from flask_session import Session
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -32,6 +32,10 @@ def create_app():
     app.config['DATA_FOLDER'] = os.path.join(base_dir, 'app', 'data')
     app.config['IMAGES_FOLDER'] = os.path.join(base_dir, 'app', 'static', 'images')
     
+    # Configure SQLAlchemy
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(base_dir, 'app', 'data', 'insta_analyser.db')}"
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
     # Initialize flask-session
     Session(app)
     
@@ -39,6 +43,10 @@ def create_app():
     for folder in [app.config['UPLOAD_FOLDER'], app.config['DATA_FOLDER'], app.config['IMAGES_FOLDER'], app.config['SESSION_FILE_DIR']]:
         if not os.path.exists(folder):
             os.makedirs(folder)
+    
+    # Initialize Database
+    from app.models.database import init_db
+    init_db(app)
     
     # Initialize Flask-Login
     login_manager = LoginManager()
@@ -49,8 +57,8 @@ def create_app():
     
     @login_manager.user_loader
     def load_user(user_id):
-        from app.models.user import User
-        return User.get_by_id(user_id)
+        from app.models.database import User
+        return User.query.get(int(user_id))
     
     # Add template context processors
     @app.context_processor
@@ -62,10 +70,10 @@ def create_app():
     def min_filter(a, b):
         return min(a, b)
     
-    # Debugging: Log session data
-    @app.before_request
-    def log_session():
-        if app.debug:
+    # Debugging: Log session data only in development
+    if os.getenv('FLASK_ENV') == 'development':
+        @app.before_request
+        def log_session():
             app.logger.debug("Session: %s, Cookies: %s", session, request.cookies)
     
     # Register blueprints
@@ -77,6 +85,18 @@ def create_app():
     
     return app
 
+# Production WSGI application
+application = create_app()
+
 if __name__ == '__main__':
-    app = create_app()
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    # Default to development mode for local running
+    debug_mode = os.getenv('FLASK_ENV', 'development') == 'development'
+    
+    # Use host 0.0.0.0 to make the server accessible from outside the container
+    port = int(os.getenv('PORT', 8000))
+    
+    application.run(
+        debug=debug_mode, 
+        host='0.0.0.0', 
+        port=port
+    ) 

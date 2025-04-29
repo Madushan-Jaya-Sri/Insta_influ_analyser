@@ -14,6 +14,8 @@ from collections import defaultdict, Counter
 import requests
 import shutil # Added for clear_data potential image deletion
 import uuid # For unique run IDs
+from app.models.database import db
+from app.models.models import Influencer, Analysis, UserSettings
 
 # Define the path for the data file relative to the script's location
 # This assumes run.py is in the root and calls create_app which sets up paths
@@ -37,7 +39,6 @@ class DataProcessor:
         if user_id:
             self.user_data_dir = os.path.join(self.data_dir, f'user_{user_id}')
             os.makedirs(self.user_data_dir, exist_ok=True)
-            self.data_file_path = os.path.join(self.user_data_dir, 'influencers.json')
             
             # Create user-specific image directory
             self.user_images_dir = os.path.join(DEFAULT_IMAGES_PATH, f'user_{user_id}')
@@ -46,231 +47,294 @@ class DataProcessor:
             os.makedirs(os.path.join(self.user_images_dir, 'misc'), exist_ok=True)
         else:
             # Fallback to global data file for backward compatibility
-            self.data_file_path = os.path.join(self.data_dir, 'influencers.json')
             self.user_data_dir = self.data_dir
             self.user_images_dir = DEFAULT_IMAGES_PATH
             
         self._load_persistent_data()
         
-    def _get_runs_dir(self):
-        """Get the directory for storing run history"""
-        runs_dir = os.path.join(self.user_data_dir, 'runs')
-        os.makedirs(runs_dir, exist_ok=True)
-        return runs_dir
-    
     def _load_persistent_data(self):
-        """Load data from the persistent JSON file if it exists."""
-        if os.path.exists(self.data_file_path):
+        """Load data from the SQLite database if the user is authenticated."""
+        if self.user_id:
             try:
-                with open(self.data_file_path, 'r', encoding='utf-8') as f:
-                    self.influencers_data = json.load(f)
+                # Query the database for influencers
+                influencers = Influencer.query.filter_by(
+                    user_id=self.user_id,
+                    is_deleted=False
+                ).all()
+                
+                # Convert to dictionary for compatibility with existing code
+                self.influencers_data = {}
+                for influencer in influencers:
+                    # Load the most recent analysis for this influencer
+                    recent_analysis = Analysis.query.filter_by(
+                        influencer_id=influencer.id,
+                        is_deleted=False
+                    ).order_by(Analysis.created_at.desc()).first()
+                    
+                    # Get the results from the analysis or set an empty dict
+                    results = recent_analysis.results if recent_analysis else {}
+                    
+                    # Create the influencer data structure
+                    self.influencers_data[influencer.username] = {
+                        'username': influencer.username,
+                        'full_name': influencer.full_name,
+                        'followers_count': influencer.followers_count,
+                        'following_count': influencer.following_count,
+                        'posts_count': influencer.posts_count,
+                        'bio': influencer.bio,
+                        'is_private': influencer.is_private,
+                        'profile_url': influencer.profile_url,
+                        'country': results.get('country', ''),
+                        'analysis': results,
+                    }
+                
                 # Rebuild countries mapping from loaded data
                 self.countries = {username: data.get('country', '') 
                                   for username, data in self.influencers_data.items()}
-                print(f"Loaded {len(self.influencers_data)} influencers from {self.data_file_path}")
-            except (FileNotFoundError, json.JSONDecodeError, Exception) as e:
-                print(f"Error loading persistent data from {self.data_file_path}: {e}")
+                
+                print(f"Loaded {len(self.influencers_data)} influencers from database for user {self.user_id}")
+            except Exception as e:
+                print(f"Error loading data from database: {e}")
+                traceback.print_exc()
                 # If loading fails, start fresh
                 self.influencers_data = {}
                 self.countries = {}
         else:
-            print(f"Persistent data file not found: {self.data_file_path}. Starting fresh.")
+            print("No user ID provided. Starting with empty data.")
+            self.influencers_data = {}
+            self.countries = {}
     
     def _save_persistent_data(self):
-        """Save the current influencers_data to the JSON file."""
-        try:
-            # Ensure the directory exists
-            os.makedirs(os.path.dirname(self.data_file_path), exist_ok=True)
-            with open(self.data_file_path, 'w', encoding='utf-8') as f:
-                # Use custom default handler for non-serializable types if needed
-                json.dump(self.influencers_data, f, indent=4, default=self._json_serializer)
-            print(f"Saved {len(self.influencers_data)} influencers to {self.data_file_path}")
-            
-            # Also save this as a new run in the history
-            self._save_run()
-        except Exception as e:
-            print(f"Error saving persistent data to {self.data_file_path}: {e}")
-            traceback.print_exc()
-    
-    def _save_run(self):
-        """Save the current analysis as a history entry"""
-        if not self.user_id or not self.influencers_data:
+        """Save the current influencers_data to the database."""
+        if not self.user_id:
+            print("Cannot save data: No user ID provided")
             return
-            
+
         try:
-            # Create a run ID and timestamp
-            run_id = str(uuid.uuid4())
-            timestamp = datetime.datetime.now().isoformat()
-            
-            # Extract summary information for the run
-            influencer_count = len(self.influencers_data)
-            influencer_names = list(self.influencers_data.keys())
-            countries = list(set(data.get('country', '') for data in self.influencers_data.values()))
-            
-            # Create the run data
-            run_data = {
-                'run_id': run_id,
-                'timestamp': timestamp,
-                'influencer_count': influencer_count,
-                'influencers': influencer_names,
-                'countries': countries,
-                'snapshot': self.influencers_data  # Store full data for historical reference
-            }
-            
-            # Save to a run-specific file
-            runs_dir = self._get_runs_dir()
-            run_file = os.path.join(runs_dir, f"{run_id}.json")
-            
-            with open(run_file, 'w', encoding='utf-8') as f:
-                json.dump(run_data, f, indent=4, default=self._json_serializer)
+            for username, data in self.influencers_data.items():
+                # Check if influencer already exists in the database
+                influencer = Influencer.query.filter_by(
+                    user_id=self.user_id,
+                    username=username,
+                    is_deleted=False
+                ).first()
                 
-            # Also update the runs index file
-            self._update_runs_index(run_id, timestamp, influencer_count, influencer_names, countries)
+                if not influencer:
+                    # Create new influencer record
+                    influencer = Influencer(
+                        user_id=self.user_id,
+                        username=username,
+                        full_name=data.get('full_name', ''),
+                        profile_url=data.get('profile_url', f'https://instagram.com/{username}'),
+                        followers_count=data.get('followers_count', 0),
+                        following_count=data.get('following_count', 0),
+                        posts_count=data.get('posts_count', 0),
+                        bio=data.get('bio', ''),
+                        is_private=data.get('is_private', False),
+                        last_updated=datetime.datetime.now()
+                    )
+                    db.session.add(influencer)
+                    db.session.flush()  # Flush to get the influencer ID
+                else:
+                    # Update existing influencer
+                    influencer.full_name = data.get('full_name', influencer.full_name)
+                    influencer.followers_count = data.get('followers_count', influencer.followers_count)
+                    influencer.following_count = data.get('following_count', influencer.following_count)
+                    influencer.posts_count = data.get('posts_count', influencer.posts_count)
+                    influencer.bio = data.get('bio', influencer.bio)
+                    influencer.is_private = data.get('is_private', influencer.is_private)
+                    influencer.last_updated = datetime.datetime.now()
+                
+                # Add an analysis record with the full data
+                if 'analysis' in data:
+                    analysis = Analysis(
+                        user_id=self.user_id,
+                        influencer_id=influencer.id,
+                        analysis_type='full',
+                        results={
+                            'country': data.get('country', ''),
+                            **data.get('analysis', {})
+                        }
+                    )
+                    db.session.add(analysis)
+            
+            # Commit all changes
+            db.session.commit()
+            print(f"Saved {len(self.influencers_data)} influencers to database for user {self.user_id}")
             
         except Exception as e:
-            print(f"Error saving run history: {e}")
+            db.session.rollback()
+            print(f"Error saving data to database: {e}")
             traceback.print_exc()
     
-    def _update_runs_index(self, run_id, timestamp, influencer_count, influencers, countries):
-        """Update the index of all runs"""
-        index_file = os.path.join(self._get_runs_dir(), "index.json")
-        runs_index = []
-        
-        # Load existing index if it exists
-        if os.path.exists(index_file):
-            try:
-                with open(index_file, 'r', encoding='utf-8') as f:
-                    runs_index = json.load(f)
-            except Exception as e:
-                print(f"Error loading runs index: {e}")
-                runs_index = []
-        
-        # Add the new run to the index
-        runs_index.append({
-            'run_id': run_id,
-            'timestamp': timestamp,
-            'influencer_count': influencer_count,
-            'influencers': influencers[:5] + ['...'] if len(influencers) > 5 else influencers,  # Limit displayed influencers
-            'countries': countries
-        })
-        
-        # Sort by timestamp (newest first)
-        runs_index.sort(key=lambda x: x['timestamp'], reverse=True)
-        
-        # Save the updated index
-        with open(index_file, 'w', encoding='utf-8') as f:
-            json.dump(runs_index, f, indent=4)
-            
     def get_runs_history(self):
-        """Get the history of analysis runs"""
-        index_file = os.path.join(self._get_runs_dir(), "index.json")
-        if not os.path.exists(index_file):
+        """Get the history of analysis runs from the database"""
+        if not self.user_id:
             return []
             
         try:
-            with open(index_file, 'r', encoding='utf-8') as f:
-                runs_index = json.load(f)
+            # Get all analysis timestamps from the database
+            analysis_records = db.session.query(
+                Analysis.created_at,
+                db.func.count(db.distinct(Analysis.influencer_id)).label('influencer_count')
+            ).filter_by(
+                user_id=self.user_id,
+                is_deleted=False
+            ).group_by(
+                db.func.date(Analysis.created_at)
+            ).order_by(
+                Analysis.created_at.desc()
+            ).all()
+            
+            # Format each record for display
+            runs_history = []
+            for record in analysis_records:
+                timestamp = record.created_at
+                run_id = timestamp.strftime('%Y%m%d%H%M')
                 
-            # Convert ISO timestamps to formatted dates
-            for run in runs_index:
-                timestamp = datetime.datetime.fromisoformat(run['timestamp'])
-                run['formatted_date'] = timestamp.strftime('%B %d, %Y %I:%M %p')
+                # Get list of influencers for this run date
+                influencer_ids = Analysis.query.filter(
+                    Analysis.user_id == self.user_id,
+                    db.func.date(Analysis.created_at) == db.func.date(timestamp)
+                ).with_entities(Analysis.influencer_id).distinct().all()
                 
-            return runs_index
+                influencer_usernames = []
+                countries = []
+                for id_tuple in influencer_ids:
+                    influencer = Influencer.query.get(id_tuple[0])
+                    if influencer:
+                        influencer_usernames.append(influencer.username)
+                        
+                        # Get analysis for this influencer
+                        analysis = Analysis.query.filter_by(
+                            user_id=self.user_id,
+                            influencer_id=influencer.id
+                        ).order_by(Analysis.created_at.desc()).first()
+                        
+                        if analysis and analysis.results and 'country' in analysis.results:
+                            countries.append(analysis.results['country'])
+                
+                # Deduplicate countries
+                countries = list(set(filter(None, countries)))
+                
+                runs_history.append({
+                    'run_id': run_id,
+                    'timestamp': timestamp.isoformat(),
+                    'formatted_date': timestamp.strftime('%B %d, %Y %I:%M %p'),
+                    'influencer_count': record.influencer_count,
+                    'influencers': influencer_usernames[:5] + ['...'] if len(influencer_usernames) > 5 else influencer_usernames,
+                    'countries': countries
+                })
+            
+            return runs_history
+        
         except Exception as e:
-            print(f"Error loading runs history: {e}")
+            print(f"Error getting runs history from database: {e}")
+            traceback.print_exc()
             return []
             
     def load_run(self, run_id):
-        """Load a specific historical run"""
+        """Load a specific historical run from the database"""
         if not self.user_id:
             return False
-            
-        run_file = os.path.join(self._get_runs_dir(), f"{run_id}.json")
-        if not os.path.exists(run_file):
-            return False
-            
+        
         try:
-            with open(run_file, 'r', encoding='utf-8') as f:
-                run_data = json.load(f)
-                
-            # Load the snapshot data
-            self.influencers_data = run_data.get('snapshot', {})
-            # Rebuild countries mapping
-            self.countries = {username: data.get('country', '') 
-                             for username, data in self.influencers_data.items()}
-                             
+            # Parse the run_id to get the date
+            run_date = datetime.datetime.strptime(run_id, '%Y%m%d%H%M')
+            
+            # Find all analyses for this date
+            analyses = Analysis.query.filter(
+                Analysis.user_id == self.user_id,
+                db.func.date(Analysis.created_at) == db.func.date(run_date)
+            ).all()
+            
+            if not analyses:
+                return False
+            
+            # Reset the current data
+            self.influencers_data = {}
+            self.countries = {}
+            
+            # Load data for each influencer in this run
+            for analysis in analyses:
+                influencer = Influencer.query.get(analysis.influencer_id)
+                if influencer:
+                    country = analysis.results.get('country', '') if analysis.results else ''
+                    
+                    self.influencers_data[influencer.username] = {
+                        'username': influencer.username,
+                        'full_name': influencer.full_name,
+                        'followers_count': influencer.followers_count,
+                        'following_count': influencer.following_count,
+                        'posts_count': influencer.posts_count,
+                        'bio': influencer.bio,
+                        'is_private': influencer.is_private,
+                        'profile_url': influencer.profile_url,
+                        'country': country,
+                        'analysis': analysis.results or {}
+                    }
+                    
+                    if country:
+                        self.countries[influencer.username] = country
+            
             return True
+            
         except Exception as e:
-            print(f"Error loading run {run_id}: {e}")
+            print(f"Error loading run from database: {e}")
+            traceback.print_exc()
             return False
-
+    
     def _json_serializer(self, obj):
-        """Custom JSON serializer for objects not serializable by default json code"""
-        if isinstance(obj, (datetime.date, datetime.datetime)):
+        """JSON serializer for objects not serializable by default json code"""
+        if isinstance(obj, (datetime.datetime, datetime.date)):
             return obj.isoformat()
-        # Handle numpy types if they appear
-        if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
-                            np.int16, np.int32, np.int64, np.uint8,
-                            np.uint16, np.uint32, np.uint64)):
+        elif isinstance(obj, np.int64):
             return int(obj)
-        elif isinstance(obj, (np.float_, np.float16, np.float32,
-                              np.float64)):
-            # Handle NaN and Inf
-            if np.isnan(obj):
-                return None  # Or 0, or 'NaN' as a string
-            if np.isinf(obj):
-                # Represent infinity appropriately, e.g., None or a large number string
-                return None # Or str(obj)
+        elif isinstance(obj, np.float64):
             return float(obj)
-        elif isinstance(obj, (np.ndarray,)): # Handle arrays if needed
-            return obj.tolist() # Convert arrays to lists
-        elif isinstance(obj, (np.bool_)):
-            return bool(obj)
-        elif isinstance(obj, (np.void)): # Handle numpy void types
+        elif pd.isna(obj):
             return None
-        # Add more types here if needed
-        print(f"Warning: Cannot serialize type {type(obj)}: {obj}")
-        return str(obj) # Fallback to string representation
+        raise TypeError(f"Type {type(obj)} not serializable")
 
     def clear_all_data(self, clear_images=False):
-        """Clears persisted data and optionally images."""
-        # Clear in-memory data
-        self.profile_data = None
-        self.posts_data = None
-        self.merged_data = None
-        self.influencers_data = {}
-        self.countries = {}
-        
-        # Delete the JSON data file
-        if os.path.exists(self.data_file_path):
+        """Clear all data for the current user"""
+        if not self.user_id:
+            return
+            
+        try:
+            # Set is_deleted=True for all user's influencers and analyses
+            Influencer.query.filter_by(user_id=self.user_id).update({'is_deleted': True})
+            Analysis.query.filter_by(user_id=self.user_id).update({'is_deleted': True})
+            db.session.commit()
+            
+            # Reset in-memory data
+            self.influencers_data = {}
+            self.countries = {}
+            
+            # Optionally clear images
+            if clear_images:
+                self._clear_user_images()
+                
+            print(f"Cleared all data for user {self.user_id}")
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error clearing data: {e}")
+            traceback.print_exc()
+            
+    def _clear_user_images(self):
+        """Clear images for a user"""
+        if self.user_id and os.path.exists(self.user_images_dir):
             try:
-                os.remove(self.data_file_path)
-                print(f"Deleted persistent data file: {self.data_file_path}")
-            except OSError as e:
-                print(f"Error deleting data file {self.data_file_path}: {e}")
-
-        # Optionally clear images
-        if clear_images and self.user_id:
-            user_images_path = self.user_images_dir
-            for subdir in ['profiles', 'posts', 'misc']:
-                dir_to_clear = os.path.join(user_images_path, subdir)
-                if os.path.exists(dir_to_clear):
-                    try:
-                        # Remove all files within the directory
-                        for filename in os.listdir(dir_to_clear):
-                            file_path = os.path.join(dir_to_clear, filename)
-                            try:
-                                if os.path.isfile(file_path) or os.path.islink(file_path):
-                                    os.unlink(file_path)
-                            except Exception as e:
-                                print(f'Failed to delete {file_path}. Reason: {e}')
-                        print(f"Cleared image files in: {dir_to_clear}")
-                    except OSError as e:
-                        print(f"Error clearing images in {dir_to_clear}: {e}")
-        
-        print("All data cleared.")
-
+                shutil.rmtree(self.user_images_dir)
+                # Recreate empty directories
+                os.makedirs(os.path.join(self.user_images_dir, 'profiles'), exist_ok=True)
+                os.makedirs(os.path.join(self.user_images_dir, 'posts'), exist_ok=True)
+                os.makedirs(os.path.join(self.user_images_dir, 'misc'), exist_ok=True)
+                print(f"Cleared images for user {self.user_id}")
+            except Exception as e:
+                print(f"Error clearing images: {e}")
+                traceback.print_exc()
 
     def load_profile_data(self, file_path):
         """Load the Instagram profile data JSON file"""

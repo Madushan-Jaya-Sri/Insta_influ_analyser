@@ -1,15 +1,40 @@
+version: '3.8'
+
 services:
   app:
     build: .
+    container_name: insta_analyzer_app
     ports:
-      - "5000:5000"
+      - "8000:8000"
     volumes:
-      - .:/app
-      - ./uploads:/app/uploads
-      - ./data:/app/data
-      - ./static:/app/static
-    env_file:
-      - .env
+      - app_data:/app/app/data
+      - app_uploads:/app/app/uploads
+      - app_static:/app/app/static/images
     environment:
-      - FLASK_ENV=development
-    command: python run.py 
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - SECRET_KEY=${SECRET_KEY:-JmzPrETNcNdxxJmCwrLqABLYXpw5NeTj9Cb88fSj}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
+      - APIFY_API_TOKEN=${APIFY_API_TOKEN:-your_apify_api_token_here}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    container_name: insta_analyzer_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - app_static:/var/www/static:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  app_data:
+  app_uploads:
+  app_static: 

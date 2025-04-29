@@ -1,150 +1,139 @@
 # Instagram Influencer Analyzer
 
-A web application for analyzing Instagram influencer profiles and engagement metrics, developed by Momentro.
+A web application for analyzing Instagram influencer data, metrics, and engagement patterns.
 
 ## Features
 
-- **URL Analysis**: Enter Instagram profile URLs for analysis
-- **Data Upload**: Upload JSON data files from Instagram
-- **Advanced Analytics**: Engagement metrics, audience insights, and content analysis
-- **Beautiful Visualization**: Interactive charts and comprehensive dashboard
-- **Image Management**: Efficient profile and post image handling
+- Track influencer engagement metrics
+- Analyze follower growth and demographics
+- Compare influencer performance
+- Generate reports on campaign effectiveness
+- Data visualization for key metrics
 
 ## Technology Stack
 
-- **Backend**: Flask (Python)
-- **Frontend**: Bootstrap, JavaScript, Chart.js
-- **Data Processing**: Pandas, NumPy
-- **AI Integration**: OpenAI API
-- **Instagram Data Collection**: Apify API
-- **Containerization**: Docker
-- **Deployment**: AWS EC2, NGINX
-- **CI/CD**: GitHub Actions
+- Frontend: HTML, CSS, JavaScript
+- Backend: Python (Flask)
+- Database: SQLite
+- Containerization: Docker
+- CI/CD: GitHub Actions
+- Deployment: AWS EC2
 
 ## Local Development
 
-### Prerequisites
-
-- Python 3.9+
-- Docker and Docker Compose (optional for containerized development)
-
-### Setup Using Python
+### Standard Setup
 
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/Insta_influ_analyser.git
+   ```
+   git clone https://github.com/yourusername/Insta_influ_analyser.git
    cd Insta_influ_analyser
    ```
 
-2. Create a virtual environment and install dependencies:
-   ```bash
+2. Create and activate a virtual environment:
+   ```
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. Install dependencies:
+   ```
    pip install -r requirements.txt
    ```
 
-3. Create a `.env` file based on the `.env.example` file and add your API keys.
-
-4. Run the application:
-   ```bash
-   python app.py
+4. Initialize the database:
+   ```
+   python scripts/init_db.py
    ```
 
-### Setup Using Docker
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/Insta_influ_analyser.git
-   cd Insta_influ_analyser
+5. Start the development server:
+   ```
+   python run.py
    ```
 
-2. Create a `.env` file based on the `.env.example` file and add your API keys.
+### Docker Setup
 
-3. Build and run with Docker Compose:
-   ```bash
+1. Make sure Docker and Docker Compose are installed on your machine
+
+2. For development environment:
+   ```
+   docker-compose -f docker-compose.dev.yml up --build
+   ```
+
+3. For production-like environment:
+   ```
    docker-compose up --build
    ```
 
-4. Access the application at `http://localhost:8000`
+4. Access the application at http://localhost:8000
 
-## Production Deployment to AWS EC2
+## Deployment
 
-### Manual Deployment
+### Docker Deployment on EC2
 
-1. SSH into your EC2 instance:
-   ```bash
-   ssh -i your-key.pem ubuntu@13.126.220.175
+1. Set up an EC2 instance with Docker and Docker Compose installed
+
+2. Clone the repository on your EC2 instance:
+   ```
+   git clone https://github.com/yourusername/Insta_influ_analyser.git
+   cd Insta_influ_analyser
    ```
 
-2. Clone your repository:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/Insta_influ_analyser.git ~/Insta_influ_analyser
-   cd ~/Insta_influ_analyser
+3. Create a `.env` file with your production settings:
+   ```
+   FLASK_ENV=production
+   SECRET_KEY=your-secure-secret-key
+   OPENAI_API_KEY=your-openai-api-key
+   APIFY_API_TOKEN=your-apify-token
    ```
 
-3. Create the `.env` file with your secrets:
-   ```bash
-   cp .env.example .env
-   nano .env  # Edit with your API keys
+4. Deploy using Docker Compose:
    ```
-
-4. Run the deployment script:
-   ```bash
-   bash scripts/deploy.sh
-   ```
-
-5. Your application will be available at http://13.126.220.175
-
-### CI/CD Setup with GitHub Actions
-
-1. Add the following secrets to your GitHub repository:
-   - `SSH_PRIVATE_KEY`: Your EC2 SSH private key
-   - `EC2_HOST`: Your EC2 instance IP (13.126.220.175)
-
-2. Push to the main branch to trigger automatic deployment.
-
-### Maintenance
-
-You can use the maintenance script for common tasks:
-```bash
-# Show logs
-bash scripts/maintenance.sh logs
-
-# Restart containers
-bash scripts/maintenance.sh restart
-
-# Check container status
-bash scripts/maintenance.sh status
-
-# Pull latest code and update
-bash scripts/maintenance.sh update
-```
-
-## SSL Configuration
-
-To enable HTTPS:
-
-1. Uncomment the certbot service in `docker-compose.prod.yml`
-
-2. Replace the placeholder in NGINX configuration with your domain name:
-   ```bash
-   nano nginx/nginx.conf
-   # Change server_name _ to server_name your-domain.com
-   ```
-
-3. Run the initial certificate request:
-   ```bash
-   docker-compose run --rm certbot certonly --webroot --webroot-path=/var/www/certbot -d your-domain.com
-   ```
-
-4. Update nginx.conf to enable SSL (example provided in the repo)
-
-5. Restart the services:
-   ```bash
-   docker-compose -f docker-compose.prod.yml down
    docker-compose -f docker-compose.prod.yml up -d
    ```
 
+### CI/CD Pipeline
+
+This project includes a CI/CD pipeline using GitHub Actions:
+
+1. CI pipeline runs on all PRs to main/develop branches:
+   - Runs tests
+   - Checks code quality
+   - Reports test coverage
+
+2. CD pipeline runs on pushes to main branch:
+   - Builds Docker image
+   - Pushes to Docker Hub
+   - Deploys to EC2 instance
+
+Required GitHub Secrets for CD:
+- `DOCKERHUB_USERNAME`: Your Docker Hub username
+- `DOCKERHUB_TOKEN`: Your Docker Hub access token
+- `EC2_HOST`: Your EC2 host IP address
+- `EC2_SSH_KEY`: Your EC2 SSH private key
+- `APP_SECRET_KEY`: Secret key for Flask
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `APIFY_API_TOKEN`: Your Apify token
+
+## Database Backups
+
+Database backups are automatically handled in the Docker setup. To manually backup:
+
+```
+docker-compose -f docker-compose.prod.yml exec app /bin/bash -c "./backup_db.sh"
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature-name`
+3. Commit your changes: `git commit -m 'Add some feature'`
+4. Push to the branch: `git push origin feature-name`
+5. Submit a pull request
+
+## License
+
+MIT
+
 ## Contact
 
-Developed by Momentro 
+Email: your.email@example.com 

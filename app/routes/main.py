@@ -18,6 +18,8 @@ from flask_login import login_required, current_user
 from app.models.forms import URLForm, CountryForm, UploadForm
 from app.models.data_processor import DataProcessor
 from app.models.apify_client_wrapper import ApifyWrapper
+from app.models.database import db, User
+from app.models.models import Influencer, Analysis
 
 main_bp = Blueprint('main', __name__)
 
@@ -751,4 +753,30 @@ def clear_data():
     except Exception as e:
         print(f"Error clearing data: {e}")
         flash('An error occurred while clearing data.', 'danger')
-        return jsonify({'success': False}), 500 
+        return jsonify({'success': False}), 500
+
+@main_bp.route('/health')
+def health_check():
+    """Simple health check endpoint for container health monitoring"""
+    db_status = True
+    try:
+        # Check if database is accessible
+        User.query.limit(1).all()
+    except Exception as e:
+        db_status = False
+    
+    # Check if required directories exist
+    app_data_dir = os.path.join(current_app.config['DATA_FOLDER'])
+    uploads_dir = os.path.join(current_app.config['UPLOAD_FOLDER'])
+    images_dir = os.path.join(current_app.config['IMAGES_FOLDER'])
+    
+    dirs_status = all(os.path.exists(d) for d in [app_data_dir, uploads_dir, images_dir])
+    
+    status = {
+        'status': 'healthy' if db_status and dirs_status else 'unhealthy',
+        'timestamp': datetime.now().isoformat(),
+        'database': 'ok' if db_status else 'error',
+        'storage': 'ok' if dirs_status else 'error'
+    }
+    
+    return jsonify(status), 200 if status['status'] == 'healthy' else 503 

@@ -1,35 +1,54 @@
-FROM python:3.11-slim
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
     build-essential \
+    libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Copy requirements file
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Install dependencies into a virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy the virtual environment from the builder stage
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install necessary system packages for runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy application code
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p uploads data static app/data/sessions app/uploads app/static
-RUN chmod -R 777 uploads data static app/data app/uploads app/static
+# Create necessary directories and set permissions
+RUN mkdir -p /app/app/data/sessions \
+    /app/app/uploads \
+    /app/app/static/images \
+    && chmod -R 755 /app
 
-# Environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV FLASK_APP=wsgi.py
-ENV FLASK_ENV=production
+# Set environment variables
+ENV FLASK_ENV=production \
+    PYTHONUNBUFFERED=1
 
-# EXPOSE port
-EXPOSE 5000
+# Expose port for the application
+EXPOSE 8000
 
-# For debugging purposes, use a direct Python command
-# CMD ["python", "run.py"]
+# Create a non-root user to run the app
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN chown -R appuser:appuser /app
+USER appuser
 
-# WSGI entry point with explicit network binding
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "300", "--access-logfile", "-", "--error-logfile", "-", "wsgi:app"] 
+# Run gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "run:application"] 

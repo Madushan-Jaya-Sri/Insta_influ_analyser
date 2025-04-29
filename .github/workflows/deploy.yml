@@ -1,47 +1,229 @@
-name: Deploy to EC2
+name: CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
 
 jobs:
-  deploy:
+  test:
+    name: Test
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov flake8
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        
+    - name: Test with pytest
+      run: |
+        pytest --cov=app
 
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.8.0
-        with:
-          ssh-private-key: ${{ secrets.AWS_SSH_KEY }}
+  build_and_deploy:
+    name: Build and Deploy
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+      
+    - name: Login to DockerHub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    
+    - name: Set environment variables
+      id: env_vars
+      run: |
+        # Set Docker image name and tag
+        echo "IMAGE_NAME=yourusername/insta-influencer-analyzer" >> $GITHUB_ENV
+        
+        # Set tag based on branch/ref
+        if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event.inputs.environment }}" == "production" ]]; then
+          echo "TAG=latest" >> $GITHUB_ENV
+          echo "ENV=production" >> $GITHUB_ENV
+        else
+          echo "TAG=develop" >> $GITHUB_ENV
+          echo "ENV=staging" >> $GITHUB_ENV
+        fi
+        
+        # Set deployment timestamp
+        echo "TIMESTAMP=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
+        
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: |
+          ${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          ${{ env.IMAGE_NAME }}:${{ env.TIMESTAMP }}
+        cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:${{ env.TAG }}
+        cache-to: type=inline
+        
+    - name: Set up SSH key
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.AWS_SSH_KEY }}
+        
+    - name: Deploy to EC2
+      env:
+        EC2_HOST: ${{ secrets.AWS_HOST }}
+        EC2_USER: ${{ secrets.AWS_USERNAME }}
+      run: |
+        # Create deployment script
+        cat > deploy_script.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        # Create application directory if it doesn't exist
+        mkdir -p ~/insta_influencer_analyzer
+        cd ~/insta_influencer_analyzer
+        
+        # Create docker-compose directory if it doesn't exist
+        mkdir -p ./nginx/ssl
+        
+        # Create .env file for production
+        cat > .env << EOT
+        FLASK_ENV=${{ env.ENV }}
+        SECRET_KEY=${{ secrets.SECRET_KEY }}
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}
+        EOT
+        
+        # Create or update docker-compose file
+        cat > docker-compose.yml << EOT
+        version: '3.8'
+        
+        services:
+          app:
+            image: ${{ env.IMAGE_NAME }}:${{ env.TAG }}
+            container_name: insta_analyzer_app
+            restart: always
+            expose:
+              - "8000"
+            volumes:
+              - app_data:/app/app/data
+              - app_uploads:/app/app/uploads
+              - app_static:/app/app/static/images
+            env_file:
+              - .env
+            healthcheck:
+              test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+              interval: 30s
+              timeout: 10s
+              retries: 3
+            networks:
+              - app_network
+        
+          nginx:
+            image: nginx:alpine
+            container_name: insta_analyzer_nginx
+            restart: always
+            ports:
+              - "80:80"
+            volumes:
+              - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+              - app_static:/var/www/static:ro
+            depends_on:
+              - app
+            networks:
+              - app_network
+        
+        networks:
+          app_network:
+            driver: bridge
+        
+        volumes:
+          app_data:
+            driver: local
+          app_uploads:
+            driver: local
+          app_static:
+            driver: local
+        EOT
+        
+        # Create nginx.conf if it doesn't exist
+        mkdir -p nginx
+        cat > nginx/nginx.conf << EOT
+        server {
+            listen 80;
+            server_name _;
+        
+            location / {
+                proxy_pass http://app:8000;
+                proxy_set_header Host \$host;
+                proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto \$scheme;
+            }
+        
+            location /static/ {
+                alias /var/www/static/;
+                expires 30d;
+            }
+        
+            client_max_body_size 20M;
+        }
+        EOT
+        
+        # Pull the latest image
+        docker pull ${{ env.IMAGE_NAME }}:${{ env.TAG }}
+        
+        # Deploy with docker-compose
+        docker-compose down
+        docker-compose up -d
+        
+        # Cleanup
+        docker system prune -af --volumes
+        docker image prune -af
+        EOF
+        
+        # Transfer and execute the deployment script
+        chmod +x deploy_script.sh
+        scp -o StrictHostKeyChecking=no deploy_script.sh $EC2_USER@$EC2_HOST:~/deploy_script.sh
+        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "chmod +x ~/deploy_script.sh && ~/deploy_script.sh && rm ~/deploy_script.sh"
 
-      - name: Add host key to known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Deploy to EC2
-        run: |
-          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "mkdir -p ~/Insta_influ_analyser"
-          rsync -avz --exclude '.git/' --exclude 'venv/' --exclude '__pycache__/' \
-            --exclude 'uploads/' --exclude 'data/' --exclude 'docker_volumes/' \
-            ./ ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }}:~/Insta_influ_analyser/
-
-      - name: Create .env file on EC2
-        run: |
-          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'FLASK_ENV=production' > ~/Insta_influ_analyser/.env"
-          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'SECRET_KEY=${{ secrets.SECRET_KEY }}' >> ~/Insta_influ_analyser/.env"
-          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}' >> ~/Insta_influ_analyser/.env"
-          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}' >> ~/Insta_influ_analyser/.env"
-          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'AWS_HOST=${{ secrets.AWS_HOST }}' >> ~/Insta_influ_analyser/.env"
-          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "echo 'AWS_USERNAME=${{ secrets.AWS_USERNAME }}' >> ~/Insta_influ_analyser/.env"
-
-      - name: Run deploy script on EC2
-        run: |
-          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser && bash scripts/deploy.sh"
-
-      - name: Fix permissions and create required files
-        run: |
-          ssh ${{ secrets.AWS_USERNAME }}@${{ secrets.AWS_HOST }} "cd ~/Insta_influ_analyser && bash scripts/fix_permissions.sh"
+    - name: Verify deployment
+      env:
+        EC2_HOST: ${{ secrets.AWS_HOST }}
+        EC2_USER: ${{ secrets.AWS_USERNAME }}
+      run: |
+        sleep 10
+        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "docker ps && docker logs insta_analyzer_app --tail 20"
+        echo "✅ Deployment completed successfully!"
+        echo "Application should be accessible at: http://${{ secrets.AWS_HOST }}" 
