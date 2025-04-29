@@ -1,11 +1,12 @@
 #!/bin/bash
+set -e
 
-# Start Nginx
-nginx
+echo "Starting Nginx..."
+nginx -t && nginx
 
-# Start Gunicorn
+echo "Starting Gunicorn..."
 cd /app
-gunicorn --bind 127.0.0.1:8000 app:app
+gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level info --access-logfile - --error-logfile - app:app
 
-# Keep the container running
+# Keep the container running if gunicorn fails
 exec "$@"

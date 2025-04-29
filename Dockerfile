@@ -12,7 +12,8 @@ WORKDIR /app
 
 # Copy requirements and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt || (cat /tmp/pip-log.txt && exit 1)
 
 # Copy application code
 COPY . .
