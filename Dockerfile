@@ -1,62 +1,34 @@
-FROM python:3.11-slim as builder
-
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libffi-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements file
-COPY requirements.txt .
-
-# Create and activate virtual environment
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Install dependencies with verbose output
-RUN pip install --no-cache-dir --verbose -r requirements.txt
-RUN pip install --no-cache-dir --verbose gunicorn==21.2.0
-# Explicitly install Flask-Session to ensure it's properly installed
-RUN pip install --no-cache-dir --verbose Flask-Session==0.5.0
-
 FROM python:3.11-slim
 
+
 WORKDIR /app
 
-# Install sqlite3
-RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy virtual environment from builder stage
-COPY --from=builder /opt/venv /opt/venv
-
-# Set environment variables
-ENV PATH="/opt/venv/bin:$PATH"
+# Install additional dependencies for matplotlib and wordcloud
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    libffi-dev \
+    libfreetype6-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy application code
 COPY . .
 
-# Create necessary directories with proper permissions BEFORE switching user
-RUN mkdir -p /app/app/data/sessions /app/app/static/uploads /app/app/data/db \
-    && chmod -R 777 /app/app/data /app/app/static/uploads
+# Create necessary directories
+RUN mkdir -p app/uploads app/data app/static/images/brand app/static/images/profiles app/static/images/posts
 
-# Create database directory and ensure SQLite has permissions
-RUN touch /app/app/data/insta_analyser.db \
-    && chmod 666 /app/app/data/insta_analyser.db
-
-# Set environment variables for Flask
-ENV FLASK_APP=run.py
+# Set environment variables
+ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
-ENV DATABASE_DIRECTORY=/app/app/data
 
 # Expose port
 EXPOSE 8000
 
-# Create a non-root user and give ownership of app directory
-RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
-
-# Command to run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "run:app"] 
+# Run with gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120", "wsgi:app"] 

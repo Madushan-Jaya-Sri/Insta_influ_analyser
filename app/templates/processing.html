@@ -267,47 +267,18 @@
             ]}
         ];
         
-        // Connect to Server-Sent Events endpoint with retry logic
-        let eventSource;
-        let retryAttempt = 0;
-        const maxRetries = 5;
-        const retryDelay = 3000; // 3 seconds
+        // Connect to Server-Sent Events endpoint
+        const eventSource = new EventSource("{{ url_for('main.progress_stream') }}");
         
-        function connectEventSource() {
-            // Close any existing connection
-            if (eventSource) {
-                eventSource.close();
-            }
-            
-            eventSource = new EventSource("{{ url_for('main.progress_stream') }}");
-            
-            eventSource.onmessage = function(event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    updateProgress(data);
-                    retryAttempt = 0; // Reset retry counter on successful message
-                } catch (e) {
-                    console.error("Error parsing progress data:", e);
-                }
-            };
-            
-            eventSource.onerror = function(error) {
-                console.error("SSE Connection error:", error);
-                eventSource.close();
-                
-                if (retryAttempt < maxRetries) {
-                    retryAttempt++;
-                    console.log(`Retrying connection (${retryAttempt}/${maxRetries}) in ${retryDelay/1000}s...`);
-                    setTimeout(connectEventSource, retryDelay);
-                } else {
-                    processingMessage.textContent = "Connection lost. Please reload the page.";
-                    console.error("Max retries reached, giving up");
-                }
-            };
-        }
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            updateProgress(data);
+        };
         
-        // Initial connection
-        connectEventSource();
+        eventSource.onerror = function() {
+            // Handle connection errors
+            eventSource.close();
+        };
         
         function updateProgress(data) {
             // Update the progress based on the data from the server
@@ -330,16 +301,9 @@
             // If processing is complete, redirect to dashboard
             if (complete) {
                 eventSource.close();
-                processingMessage.textContent = "Processing complete! Redirecting to dashboard...";
                 setTimeout(() => {
-                    try {
-                        window.location.href = "{{ url_for('main.dashboard') }}";
-                    } catch (e) {
-                        console.error("Error redirecting:", e);
-                        // Fallback if redirect fails
-                        window.location.href = "/dashboard";
-                    }
-                }, 1500);
+                    window.location.href = "{{ url_for('main.dashboard') }}";
+                }, 1000);
             }
         }
         

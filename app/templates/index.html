@@ -55,120 +55,87 @@
             </div>
         </div>
 
-        <!-- Form Section (for authenticated users) or CTA (for guests) -->
+        <!-- Form Section -->
         <div class="col-md-8 mt-2">
-            {% if show_form %}
-                <!-- Analysis Form for Authenticated Users -->
-                <div class="card upload-form">
-                    <div class="card-header bg-gradient text-white">
-                        <h4 class="mb-0"><i class="fas fa-search me-2"></i>Analyze Influencers</h4>
+            <div class="card upload-form">
+                <div class="card-header bg-gradient text-white">
+                    <h4 class="mb-0"><i class="fas fa-search me-2"></i>Analyze Influencers</h4>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-4">
+                        <h5>Start your influencer analysis in seconds</h5>
+                        <p class="text-muted">Enter Instagram profile URLs to begin analysis</p>
                     </div>
-                    <div class="card-body">
-                        <div class="text-center mb-4">
-                            <h5>Start your influencer analysis in seconds</h5>
-                            <p class="text-muted">Enter Instagram profile URLs to begin analysis</p>
+                    
+                    <form method="POST">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="mb-3">
+                            {{ form.instagram_urls.label(class="form-label") }}
+                            {{ form.instagram_urls(class="form-control custom-input", rows=3, placeholder="https://www.instagram.com/username/\nhttps://www.instagram.com/another_username/") }}
+                            {% if form.instagram_urls.errors %}
+                                <div class="alert alert-danger mt-2">
+                                    {% for error in form.instagram_urls.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">Enter one Instagram profile URL per line</small>
                         </div>
                         
-                        <form method="POST">
-                            {{ form.hidden_tag() }}
-                            
-                            <div class="mb-3">
-                                {{ form.instagram_urls.label(class="form-label") }}
-                                {{ form.instagram_urls(class="form-control custom-input", rows=3, placeholder="https://www.instagram.com/username/\nhttps://www.instagram.com/another_username/") }}
-                                {% if form.instagram_urls.errors %}
-                                    <div class="alert alert-danger mt-2">
-                                        {% for error in form.instagram_urls.errors %}
-                                            {{ error }}
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
-                                <small class="form-text text-muted">Enter one Instagram profile URL per line</small>
-                            </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        {{ form.max_posts.label(class="form-label") }}
-                                        {{ form.max_posts(class="form-control custom-input") }}
-                                        {% if form.max_posts.errors %}
-                                            <div class="alert alert-danger mt-2">
-                                                {% for error in form.max_posts.errors %}
-                                                    {{ error }}
-                                                {% endfor %}
-                                            </div>
-                                        {% endif %}
-                                        <small class="form-text text-muted">Maximum number of posts to analyze</small>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        {{ form.time_filter.label(class="form-label") }}
-                                        {{ form.time_filter(class="form-select custom-input") }}
-                                        {% if form.time_filter.errors %}
-                                            <div class="alert alert-danger mt-2">
-                                                {% for error in form.time_filter.errors %}
-                                                    {{ error }}
-                                                {% endfor %}
-                                            </div>
-                                        {% endif %}
-                                        <small class="form-text text-muted">Filter posts by time period</small>
-                                    </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    {{ form.max_posts.label(class="form-label") }}
+                                    {{ form.max_posts(class="form-control custom-input") }}
+                                    {% if form.max_posts.errors %}
+                                        <div class="alert alert-danger mt-2">
+                                            {% for error in form.max_posts.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">Maximum number of posts to analyze</small>
                                 </div>
                             </div>
-                            
-                            <div class="text-center">
-                                {{ form.submit(class="btn btn-gradient btn-lg px-5", value="Analyze Profiles") }}
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    {{ form.time_filter.label(class="form-label") }}
+                                    {{ form.time_filter(class="form-select custom-input") }}
+                                    {% if form.time_filter.errors %}
+                                        <div class="alert alert-danger mt-2">
+                                            {% for error in form.time_filter.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">Filter posts by time period</small>
+                                </div>
                             </div>
-                        </form>
-                    </div>
-                </div>
-                
-                <div class="card mt-4 info-card">
-                    <div class="card-body">
-                        <h5><i class="fas fa-info-circle me-2 instagram-gradient-text"></i>How It Works</h5>
-                        <ol class="mt-3 instruction-list">
-                            <li><span class="step-number">1</span> Enter Instagram profile URLs (one per line)</li>
-                            <li><span class="step-number">2</span> Set the maximum number of posts to analyze</li>
-                            <li><span class="step-number">3</span> Choose a time filter for posts (optional)</li>
-                            <li><span class="step-number">4</span> Click "Analyze Profiles" to start the analysis</li>
-                            <li><span class="step-number">5</span> View detailed analytics and insights</li>
-                        </ol>
-                        <div class="alert custom-alert mt-3">
-                            <i class="fas fa-clock me-2"></i> Analysis may take a few minutes depending on the number of profiles and posts.
                         </div>
-                    </div>
-                </div>
-            {% else %}
-                <!-- Call to Action for Unauthenticated Users -->
-                <div class="card auth-cta">
-                    <div class="card-body text-center py-5">
-                        <i class="fas fa-lock fa-4x mb-3 instagram-gradient-text"></i>
-                        <h3 class="mb-4">Ready to analyze Instagram influencers?</h3>
-                        <p class="lead mb-4">Sign in or create an account to access our powerful influencer analytics platform.</p>
-                        <div class="d-grid gap-3 col-md-8 mx-auto">
-                            <a href="{{ url_for('auth.login') }}" class="btn btn-gradient btn-lg">
-                                <i class="fas fa-sign-in-alt me-2"></i>Sign In
-                            </a>
-                            <a href="{{ url_for('auth.register') }}" class="btn btn-outline-primary btn-lg">
-                                <i class="fas fa-user-plus me-2"></i>Create Account
-                            </a>
+                        
+                        <div class="text-center">
+                            {{ form.submit(class="btn btn-gradient btn-lg px-5", value="Analyze Profiles") }}
                         </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card mt-4 info-card">
+                <div class="card-body">
+                    <h5><i class="fas fa-info-circle me-2 instagram-gradient-text"></i>How It Works</h5>
+                    <ol class="mt-3 instruction-list">
+                        <li><span class="step-number">1</span> Enter Instagram profile URLs (one per line)</li>
+                        <li><span class="step-number">2</span> Set the maximum number of posts to analyze</li>
+                        <li><span class="step-number">3</span> Choose a time filter for posts (optional)</li>
+                        <li><span class="step-number">4</span> Click "Analyze Profiles" to start the analysis</li>
+                        <li><span class="step-number">5</span> View detailed analytics and insights</li>
+                    </ol>
+                    <div class="alert custom-alert mt-3">
+                        <i class="fas fa-clock me-2"></i> Analysis may take a few minutes depending on the number of profiles and posts.
                     </div>
                 </div>
-                
-                <div class="card mt-4 info-card">
-                    <div class="card-body">
-                        <h5><i class="fas fa-star me-2 instagram-gradient-text"></i>Why Create an Account?</h5>
-                        <ul class="benefit-list mt-3">
-                            <li><i class="fas fa-check-circle text-success me-2"></i>Analyze unlimited Instagram profiles</li>
-                            <li><i class="fas fa-check-circle text-success me-2"></i>Save and compare influencer analytics over time</li>
-                            <li><i class="fas fa-check-circle text-success me-2"></i>Access detailed engagement metrics and audience insights</li>
-                            <li><i class="fas fa-check-circle text-success me-2"></i>Export analytics reports for your marketing campaigns</li>
-                            <li><i class="fas fa-check-circle text-success me-2"></i>Identify the perfect influencers for your brand</li>
-                        </ul>
-                    </div>
-                </div>
-            {% endif %}
+            </div>
         </div>
     </div>
     
@@ -286,14 +253,15 @@
     }
     
     .custom-input {
-        border-radius: 10px;
+        border-radius: 8px;
+        padding: 12px;
         border: 1px solid #e0e0e0;
         transition: all 0.3s ease;
     }
     
     .custom-input:focus {
-        border-color: #833ab4;
-        box-shadow: 0 0 0 0.2rem rgba(131, 58, 180, 0.25);
+        box-shadow: 0 0 0 3px rgba(131, 58, 180, 0.2);
+        border-color: #c13584;
     }
     
     .info-card {
@@ -342,33 +310,10 @@
     
     /* Alert */
     .custom-alert {
-        background-color: rgba(225, 48, 108, 0.1);
-        border-left: 4px solid #e1306c;
-        border-radius: 10px;
-    }
-    
-    /* Auth CTA Styles */
-    .auth-cta {
-        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-        border: none;
-        border-radius: 12px;
-        overflow: hidden;
-        transition: all 0.3s ease;
-    }
-    
-    .auth-cta:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 15px 35px rgba(0,0,0,0.15);
-    }
-    
-    .benefit-list {
-        list-style: none;
-        padding-left: 0;
-    }
-    
-    .benefit-list li {
-        margin-bottom: 12px;
-        font-size: 1.05rem;
+        background-color: #fef5e7;
+        border-left: 4px solid #f39c12;
+        color: #8a6d3b;
+        border-radius: 4px;
     }
     
     /* Powered by section */

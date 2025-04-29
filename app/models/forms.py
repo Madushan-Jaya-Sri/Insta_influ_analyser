@@ -1,7 +1,7 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired, FileAllowed
-from wtforms import StringField, SubmitField, TextAreaField, IntegerField, SelectField, PasswordField, BooleanField
-from wtforms.validators import DataRequired, URL, ValidationError, NumberRange, Optional, Length, Email, EqualTo, Regexp
+from wtforms import StringField, SubmitField, TextAreaField, IntegerField, SelectField
+from wtforms.validators import DataRequired, URL, ValidationError, NumberRange, Optional
 
 class UploadForm(FlaskForm):
     """Form for uploading Instagram data files"""
@@ -46,35 +46,3 @@ class CountryForm(FlaskForm):
     submit = SubmitField('Submit Countries')
     
     # Dynamic fields will be added in the route based on the uploaded data 
-
-class LoginForm(FlaskForm):
-    """Form for user login"""
-    username = StringField('Username or Email', validators=[
-        DataRequired(message='Please enter your username or email')
-    ])
-    password = PasswordField('Password', validators=[
-        DataRequired(message='Please enter your password')
-    ])
-    remember_me = BooleanField('Keep me logged in')
-    submit = SubmitField('Sign In to Analyzer')
-
-class RegistrationForm(FlaskForm):
-    """Form for user registration"""
-    username = StringField('Create a Username', validators=[
-        DataRequired(message='Please enter a username'),
-        Length(min=3, max=30, message='Username must be between 3 and 30 characters'),
-        Regexp('^[A-Za-z0-9_]+$', message='Username can only contain letters, numbers, and underscores')
-    ])
-    email = StringField('Email Address', validators=[
-        DataRequired(message='Please enter your email'),
-        Email(message='Please enter a valid email address')
-    ])
-    password = PasswordField('Create a Password', validators=[
-        DataRequired(message='Please enter a password'),
-        Length(min=8, message='Password must be at least 8 characters')
-    ])
-    confirm_password = PasswordField('Confirm Your Password', validators=[
-        DataRequired(message='Please confirm your password'),
-        EqualTo('password', message='Passwords must match')
-    ])
-    submit = SubmitField('Create Account') 
