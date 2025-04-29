@@ -57,30 +57,50 @@ jobs:
         
         # Kill any processes that might be using our ports
         echo "Checking for processes using port 8000..."
-        sudo lsof -i :8000 | grep LISTEN
-        if [ $? -eq 0 ]; then
+        # Use true to ensure command doesn't fail if no process found
+        sudo lsof -i :8000 | grep LISTEN || true
+        # Kill processes more safely by checking if there are any first
+        if sudo lsof -t -i:8000 > /dev/null 2>&1; then
           echo "Found processes using port 8000, killing them..."
-          sudo kill -9 $(sudo lsof -t -i:8000) || echo "No processes to kill on port 8000"
+          sudo kill -9 $(sudo lsof -t -i:8000)
+        else
+          echo "No processes found using port 8000"
         fi
         
         echo "Checking for processes using port 80..."
-        sudo lsof -i :80 | grep LISTEN
-        if [ $? -eq 0 ]; then
+        # Use true to ensure command doesn't fail if no process found
+        sudo lsof -i :80 | grep LISTEN || true
+        # Kill processes more safely by checking if there are any first
+        if sudo lsof -t -i:80 > /dev/null 2>&1; then
           echo "Found processes using port 80, killing them..."
-          sudo kill -9 $(sudo lsof -t -i:80) || echo "No processes to kill on port 80"
+          sudo kill -9 $(sudo lsof -t -i:80)
+        else
+          echo "No processes found using port 80"
         fi
         
         # Stop existing docker containers
         echo "Stopping all Docker containers..."
-        docker stop $(docker ps -aq) || echo "No containers to stop"
+        if [ -n "$(docker ps -q)" ]; then
+          docker stop $(docker ps -q)
+        else
+          echo "No running containers to stop"
+        fi
         
         # Remove existing docker containers
         echo "Removing all Docker containers..."
-        docker rm -f $(docker ps -aq) || echo "No containers to remove"
+        if [ -n "$(docker ps -aq)" ]; then
+          docker rm -f $(docker ps -aq)
+        else
+          echo "No containers to remove"
+        fi
+        
+        # Remove specific container names that might exist
+        echo "Ensuring specific containers are removed..."
+        docker rm -f insta_analyzer_app nginx flask_app 2>/dev/null || echo "No specific containers to remove"
         
         # Remove nginx at system level
         echo "Stopping system Nginx service..."
-        sudo systemctl stop nginx || echo "Nginx service not running"
+        sudo systemctl stop nginx 2>/dev/null || echo "Nginx service not running"
         
         # Remove previous application data
         echo "Removing previous application directories..."
@@ -181,7 +201,7 @@ jobs:
         
         # Double-check no containers are running
         echo "Ensuring no containers with same names are running..."
-        docker rm -f insta_analyzer_app || true
+        docker rm -f insta_analyzer_app 2>/dev/null || true
         
         # Build and deploy with docker-compose
         echo "Building and starting application with Docker Compose..."
@@ -216,7 +236,7 @@ jobs:
         ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "docker ps -a"
         
         echo "=== Container logs ==="
-        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "docker logs insta_analyzer_app --tail 50"
+        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "docker logs insta_analyzer_app --tail 50 || echo 'No logs found'"
         
         echo "=== Application health check ==="
         ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "curl -s http://localhost:8000/health || echo 'Health check failed'"
