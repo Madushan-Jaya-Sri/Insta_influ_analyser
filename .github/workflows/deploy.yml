@@ -43,6 +43,68 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.AWS_SSH_KEY }}
         
+    - name: Clean up EC2 environment
+      env:
+        EC2_HOST: ${{ secrets.AWS_HOST }}
+        EC2_USER: ${{ secrets.AWS_USERNAME }}
+      run: |
+        # Create cleanup script
+        cat > cleanup_script.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "=== Starting thorough Docker environment cleanup ==="
+        
+        # Kill any processes that might be using our ports
+        echo "Checking for processes using port 8000..."
+        sudo lsof -i :8000 | grep LISTEN
+        if [ $? -eq 0 ]; then
+          echo "Found processes using port 8000, killing them..."
+          sudo kill -9 $(sudo lsof -t -i:8000) || echo "No processes to kill on port 8000"
+        fi
+        
+        echo "Checking for processes using port 80..."
+        sudo lsof -i :80 | grep LISTEN
+        if [ $? -eq 0 ]; then
+          echo "Found processes using port 80, killing them..."
+          sudo kill -9 $(sudo lsof -t -i:80) || echo "No processes to kill on port 80"
+        fi
+        
+        # Stop existing docker containers
+        echo "Stopping all Docker containers..."
+        docker stop $(docker ps -aq) || echo "No containers to stop"
+        
+        # Remove existing docker containers
+        echo "Removing all Docker containers..."
+        docker rm -f $(docker ps -aq) || echo "No containers to remove"
+        
+        # Remove nginx at system level
+        echo "Stopping system Nginx service..."
+        sudo systemctl stop nginx || echo "Nginx service not running"
+        
+        # Remove previous application data
+        echo "Removing previous application directories..."
+        rm -rf ~/insta_influencer_analyzer
+        rm -rf ~/Insta_influ_analyser
+        
+        # Clean Docker resources
+        echo "Pruning Docker networks..."
+        docker network prune -f
+        
+        echo "Pruning Docker volumes..."
+        docker volume prune -f
+        
+        echo "Pruning Docker images..."
+        docker image prune -a -f
+        
+        echo "=== Cleanup completed successfully ==="
+        EOF
+        
+        # Transfer and execute the cleanup script
+        chmod +x cleanup_script.sh
+        scp -o StrictHostKeyChecking=no cleanup_script.sh $EC2_USER@$EC2_HOST:~/cleanup_script.sh
+        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "chmod +x ~/cleanup_script.sh && sudo ~/cleanup_script.sh && rm ~/cleanup_script.sh"
+        
     - name: Deploy to EC2
       env:
         EC2_HOST: ${{ secrets.AWS_HOST }}
@@ -62,24 +124,19 @@ jobs:
         #!/bin/bash
         set -e
         
-        # Create application directory if it doesn't exist
+        echo "=== Starting deployment process ==="
+        
+        # Create application directory
+        echo "Creating application directory..."
         mkdir -p ~/insta_influencer_analyzer
         cd ~/insta_influencer_analyzer
         
-        # Remove any existing nginx configuration files to avoid conflicts
-        rm -f nginx_config.conf
-        rm -f nginx.conf
-        
-        # Try to stop any running Nginx service to free port 80
-        sudo systemctl stop nginx || true
-        
         # Extract the application code
+        echo "Extracting application code..."
         tar -xzf /tmp/app.tar.gz -C .
         
-        # Create required directories
-        mkdir -p ./nginx
-        
         # Create .env file for production
+        echo "Creating environment file..."
         cat > .env << EOT
         FLASK_ENV=${{ env.ENV }}
         SECRET_KEY=${{ secrets.SECRET_KEY }}
@@ -88,6 +145,7 @@ jobs:
         EOT
         
         # Create or update docker-compose file
+        echo "Creating Docker Compose configuration..."
         cat > docker-compose.yml << EOT
         version: '3.8'
         
@@ -121,19 +179,24 @@ jobs:
             driver: local
         EOT
         
-        # Make sure any existing containers are stopped and removed
-        docker-compose down || true
+        # Double-check no containers are running
+        echo "Ensuring no containers with same names are running..."
         docker rm -f insta_analyzer_app || true
-        docker rm -f insta_analyzer_nginx || true
         
         # Build and deploy with docker-compose
+        echo "Building and starting application with Docker Compose..."
         docker-compose build --no-cache
         docker-compose up -d
         
+        # Quick sanity check - ensure the container is running
+        echo "Verifying container is running..."
+        docker ps | grep insta_analyzer_app || (echo "Container failed to start!" && exit 1)
+        
         # Cleanup
-        docker system prune -af --volumes
-        docker image prune -af
+        echo "Cleaning up temporary files..."
         rm -f /tmp/app.tar.gz
+        
+        echo "=== Deployment completed successfully ==="
         EOF
         
         # Transfer and execute the deployment script
@@ -141,12 +204,22 @@ jobs:
         scp -o StrictHostKeyChecking=no deploy_script.sh $EC2_USER@$EC2_HOST:~/deploy_script.sh
         ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "chmod +x ~/deploy_script.sh && ~/deploy_script.sh && rm ~/deploy_script.sh"
 
-    - name: Verify deployment
+    - name: Verify deployment and check logs
       env:
         EC2_HOST: ${{ secrets.AWS_HOST }}
         EC2_USER: ${{ secrets.AWS_USERNAME }}
       run: |
-        sleep 20
-        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "docker ps && docker logs insta_analyzer_app --tail 20"
-        echo "✅ Deployment completed successfully!"
-        echo "Application should be accessible at: http://${{ secrets.AWS_HOST }}:8000" 
+        # Give time for the application to fully start
+        sleep 30
+        
+        echo "=== Container status ==="
+        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "docker ps -a"
+        
+        echo "=== Container logs ==="
+        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "docker logs insta_analyzer_app --tail 50"
+        
+        echo "=== Application health check ==="
+        ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "curl -s http://localhost:8000/health || echo 'Health check failed'"
+        
+        echo "✅ Deployment verification complete!"
+        echo "Your application should be accessible at: http://${{ secrets.AWS_HOST }}:8000" 
