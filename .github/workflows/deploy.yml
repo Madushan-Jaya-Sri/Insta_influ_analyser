@@ -33,17 +33,7 @@ jobs:
             # Fix ipython version in requirements.txt before building
             sed -i 's/ipython==9.1.0/ipython==8.18.1/g' requirements.txt
             
-            # Find the correct app module by checking the directory structure
-            echo "Checking application structure..."
-            ls -la
-            
-            # Examine run.py to find where the app is imported from
-            if [ -f "run.py" ]; then
-              echo "Content of run.py:"
-              cat run.py
-            fi
-            
-            # Create a WSGI file that properly imports the Flask application
+            # Create a WSGI file that properly uses the create_app function from run.py
             cat > wsgi.py << 'EOF'
             #!/usr/bin/env python3
             import os
@@ -52,23 +42,12 @@ jobs:
             # Add the current directory to the path
             sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-            # Import the Flask app from the app package
-            try:
-                from app import app as application
-            except ImportError:
-                try:
-                    from app.app import app as application
-                except ImportError:
-                    try:
-                        import run
-                        from run import app as application
-                    except (ImportError, AttributeError):
-                        try:
-                            from app import create_app
-                            application = create_app()
-                        except ImportError:
-                            raise ImportError("Could not import Flask application. Make sure 'app' is defined somewhere in your project.")
+            # Import the create_app function from run.py
+            from run import create_app
 
+            # Create the application instance
+            application = create_app()
+            
             # For Gunicorn
             app = application
 
@@ -114,8 +93,12 @@ jobs:
             echo "Starting Gunicorn with Flask application..."
             cd /app
             
-            # Straight to the point - use our new wsgi.py file
-            echo "Using wsgi.py as the WSGI entry point"
+            # Create necessary directories with proper permissions
+            mkdir -p app/uploads app/data app/static/images
+            chmod -R 777 app/uploads app/data app/static/images
+            
+            # Use the wsgi module with the create_app function from run.py
+            echo "Using wsgi.py with create_app function from run.py"
             gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level debug --access-logfile - --error-logfile - wsgi:app
             
             # Keep the container running for debugging
@@ -147,6 +130,20 @@ jobs:
 
             # Copy application code
             COPY . .
+
+            # Create wsgi.py and wsgi module with correct imports
+            RUN if [ ! -f "wsgi.py" ]; then \
+                echo "Creating wsgi.py"; \
+                echo '#!/usr/bin/env python3' > wsgi.py; \
+                echo 'import os' >> wsgi.py; \
+                echo 'import sys' >> wsgi.py; \
+                echo 'sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))' >> wsgi.py; \
+                echo 'from run import create_app' >> wsgi.py; \
+                echo 'application = create_app()' >> wsgi.py; \
+                echo 'app = application' >> wsgi.py; \
+                echo 'if __name__ == "__main__":' >> wsgi.py; \
+                echo '    app.run()' >> wsgi.py; \
+            fi
 
             # Make sure the uploads and data directories exist
             RUN mkdir -p app/uploads app/data app/static/images && \
