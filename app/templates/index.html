@@ -9,7 +9,8 @@
             <h1 class="display-4 fw-bold instagram-gradient-animated mb-3">Instagram Influencer Analyzer</h1>
             <p class="lead mb-4 fw-medium text-muted">Uncover powerful insights about Instagram influencers to supercharge your marketing strategy</p>
             <div class="hero-image mb-4">
-                <img src="{{ url_for('static', filename='images/brand/momentro-logo.png') }}" alt="Momentro Logo" class="momentro-logo img-fluid" style="max-height: 80px; background: transparent; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);" onerror="this.src='https://via.placeholder.com/200x80?text=Momentro'; this.onerror='';">
+                <img src="{{ url_for('static', filename='images/brand/momentro-logo.png') }}" alt="Momentro Logo" class="momentro-logo img-fluid" style="max-height: 80px; background: transparent; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);" 
+                    onerror="if (this.src.includes('momentro-logo.png')) { this.src='{{ url_for('static', filename='images/brand/momentro_logo.png') }}'; } else { this.src='https://via.placeholder.com/200x80?text=Momentro'; this.onerror=''; }">
             </div>
         </div>
     </div>
@@ -142,7 +143,8 @@
     <div class="row text-center powered-by-section mt-5">
         <div class="col-12">
             <p class="mb-2">Developed and powered by</p>
-            <img src="{{ url_for('static', filename='images/brand/momentro-logo.png') }}" alt="Momentro Logo" class="momentro-large-logo img-fluid" style="max-height: 100px; background: transparent;" onerror="this.src='https://via.placeholder.com/300x100?text=Momentro'; this.onerror='';">
+            <img src="{{ url_for('static', filename='images/brand/momentro-logo.png') }}" alt="Momentro Logo" class="momentro-large-logo img-fluid" style="max-height: 100px; background: transparent;" 
+                onerror="if (this.src.includes('momentro-logo.png')) { this.src='{{ url_for('static', filename='images/brand/momentro_logo.png') }}'; } else { this.src='https://via.placeholder.com/300x100?text=Momentro'; this.onerror=''; }">
         </div>
     </div>
 </div>

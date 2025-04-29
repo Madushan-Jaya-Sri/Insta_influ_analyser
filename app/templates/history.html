@@ -46,7 +46,17 @@
                                         {{ record.profile_username }}
                                     </a>
                                 </td>
-                                <td>{{ record.profile_follower_count|default(0)|format_number }}</td>
+                                <td>
+                                    {% if record.profile_follower_count and record.profile_follower_count > 0 %}
+                                        {{ record.profile_follower_count|format_number }}
+                                    {% elif record.analysis_results and record.analysis_results.get('followers_count') %}
+                                        {{ record.analysis_results.get('followers_count')|format_number }}
+                                    {% elif record.analysis_results and record.analysis_results.get('followers') %}
+                                        {{ record.analysis_results.get('followers')|format_number }}
+                                    {% else %}
+                                        <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ record.max_posts|default('N/A') }} posts</td>
                                 <td>{{ record.timestamp.strftime('%b %d, %Y %H:%M') }}</td>
                                 <td>
