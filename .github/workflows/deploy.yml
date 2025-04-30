@@ -32,7 +32,17 @@ jobs:
             # Fix ipython version in requirements.txt
             sed -i 's/ipython==9.1.0/ipython==8.18.1/g' requirements.txt
             
-            # Create app static directories
+            # Fix static directory structure - merge static directories
+            echo "Merging static directories to resolve conflicts..."
+            if [ -d "./static" ]; then
+              echo "Merging ./static into ./app/static"
+              mkdir -p ./app/static
+              cp -r ./static/* ./app/static/
+              rm -rf ./static
+              echo "Merged static directories successfully"
+            fi
+            
+            # Create app static directories and ensure brand folder exists
             mkdir -p app/static/images/brand
             
             # Create a simple logo HTML file
@@ -111,10 +121,19 @@ jobs:
                 listen 80;
                 server_name localhost;
                 
+                # Specific match for brand logo files
+                location ~ ^/static/images/brand/.*\.(png|jpg|jpeg|gif)$ {
+                    alias /app/app/static/images/brand/;
+                    try_files $uri =404;
+                    expires 30d;
+                    add_header Cache-Control "public";
+                }
+                
                 # Serve static files directly
                 location /static/ {
                     alias /app/app/static/;
                     expires 30d;
+                    try_files $uri =404;
                 }
                 
                 location /uploads/ {
@@ -133,32 +152,38 @@ jobs:
             }
             EOF
             
-            # Create start script
+            # Create start script with static file handling logic
             cat > start.sh << 'EOF'
             #!/bin/bash
             set -e
             
-            echo "Starting Nginx..."
-            nginx -t
-            service nginx start
-            
-            echo "Setting up static files..."
+            echo "Setting up application directories..."
             cd /app
             
             # Create necessary directories with proper permissions
             mkdir -p app/uploads app/data app/static/images app/static/images/brand
-            chmod -R 777 app/uploads app/data app/static/images
+            chmod -R 777 app/uploads app/data app/static
             
-            # Check logo files (debugging)
-            echo "Logo files in container:"
-            ls -la app/static/images/brand/
+            # Debug static files (check directory structure)
+            echo "Static files directory structure:"
+            find app/static -type d | sort
             
-            # Create logo files if they don't exist
+            # Ensure logo files exist with proper permissions
             if [ ! -s "app/static/images/brand/momentro-logo.png" ]; then
               echo "Creating momentro-logo.png in container..."
               echo "MOMENTRO" > app/static/images/brand/momentro-logo.png
-              echo "MOMENTRO" > app/static/images/brand/momentro_logo.png
+              chmod 644 app/static/images/brand/momentro-logo.png
             fi
+            
+            if [ ! -s "app/static/images/brand/momentro_logo.png" ]; then
+              echo "Creating momentro_logo.png in container..."
+              echo "MOMENTRO" > app/static/images/brand/momentro_logo.png
+              chmod 644 app/static/images/brand/momentro_logo.png
+            fi
+            
+            echo "Starting Nginx..."
+            nginx -t
+            service nginx start
             
             # Start Gunicorn
             echo "Starting Gunicorn with Flask application..."
@@ -170,7 +195,7 @@ jobs:
             
             chmod +x start.sh
             
-            # Create simplified Dockerfile
+            # Create Dockerfile with explicit static directory handling
             cat > Dockerfile.simple << 'EOF'
             FROM python:3.10-slim
 
@@ -190,15 +215,21 @@ jobs:
                 pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 && \
                 pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -r requirements.txt --no-deps
 
+            # Create static directories first to avoid issues with file permissions
+            RUN mkdir -p app/static/images/brand && \
+                mkdir -p app/uploads app/data
+
             # Copy application code (excluding static files that will be mounted)
             COPY . .
             
-            # Debug static files
-            RUN find app/static -type f | sort || true
+            # Debug static directory
+            RUN echo "Static directories in Docker image:" && \
+                find . -name static | sort && \
+                echo "Contents of app/static:" && \
+                find app/static -type f | sort || true
 
-            # Setup directories
-            RUN mkdir -p app/uploads app/data app/static/images/brand && \
-                chmod -R 777 app/uploads app/data app/static
+            # Ensure directories have proper permissions
+            RUN chmod -R 777 app/uploads app/data app/static
 
             # Setup start script
             COPY start.sh /start.sh
@@ -221,27 +252,31 @@ jobs:
             docker rm instagram-analyzer || true
             
             echo "Starting new container..."
-            # Run new container with ABSOLUTE PATH for static files volume
+            # Run container with all static files mounted properly
             docker run -d \
               --name instagram-analyzer \
               -p 80:80 \
               -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
               -e APIFY_API_TOKEN="${{ secrets.APIFY_API_TOKEN }}" \
               -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
-              -v $(realpath app/static/images/brand):/app/app/static/images/brand \
+              -v $(pwd)/app/static:/app/app/static \
               -v instagram_data:/app/app/data \
               -v instagram_uploads:/app/app/uploads \
               --restart unless-stopped \
               instagram-analyzer:latest
             
             echo "Checking if container is running..."
-            # Check if container is running
+            # Verify container is running
             docker ps | grep instagram-analyzer
             
-            echo "Testing access to the logo..."
-            # Test direct access to logo file
+            echo "Testing access to static files..."
+            # Test access to static files
             sleep 3
-            curl -s http://localhost/static/images/brand/momentro-logo.png | hexdump -C | head
+            echo "Checking logo file:"
+            curl -I http://localhost/static/images/brand/momentro-logo.png
+            
+            echo "Checking CSS file:"
+            curl -I http://localhost/static/css/style.css || echo "CSS file not found"
             
             echo "Container logs:"
             # Show logs
@@ -251,4 +286,4 @@ jobs:
             # Clean up unused images
             docker image prune -af --filter "until=24h"
             
-            echo "Deployment completed." 
+            echo "Deployment completed successfully." 
