@@ -6,8 +6,6 @@ from flask_session import Session  # Add this import
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from dotenv import load_dotenv
-from app import create_app
-from app import socketio
 
 # Load environment variables
 load_dotenv(override=True)
@@ -111,4 +109,5 @@ def create_app():
     return app
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    app = create_app()
+    app.run(debug=True, host='127.0.0.1', port=8002)

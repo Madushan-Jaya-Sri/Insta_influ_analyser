@@ -72,39 +72,12 @@ find /app/static -type f | sort
 echo "Checking Font Awesome files:"
 ls -la /app/app/static/font-awesome/4.3.0/css/ || echo "Font Awesome directory not found"
 
-# Create Gunicorn config file with proper WebSocket support
-cat > /app/gunicorn.conf.py << 'EOF'
-# Enable WebSocket support
-worker_class = 'geventwebsocket.gunicorn.workers.GeventWebSocketWorker'
-
-# Increase timeout for long polling requests
-timeout = 300
-
-# Increase keepalive for persistent connections
-keepalive = 65
-
-# Worker options
-workers = 3
-threads = 4
-
-# Logging
-loglevel = 'info'
-accesslog = '-'
-errorlog = '-'
-
-# Enable async workers for non-blocking behavior
-worker_connections = 1000
-EOF
-
-echo "Installing WebSocket dependencies..."
-pip install gevent gevent-websocket
-
 echo "Starting Nginx..."
 nginx -t && nginx
 
-echo "Starting Gunicorn with WebSocket support..."
+echo "Starting Gunicorn..."
 cd /app
-gunicorn --config /app/gunicorn.conf.py app:app
+gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level debug --access-logfile - --error-logfile - app:app
 
 # Keep the container running if gunicorn fails
 exec "$@"
