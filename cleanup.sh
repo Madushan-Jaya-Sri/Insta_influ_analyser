@@ -5,6 +5,7 @@
 #   ./cleanup.sh --all   - clean all, including database and user data
 #   ./cleanup.sh --db    - reset database only
 #   ./cleanup.sh --root  - clean root directory files that should be in app directory
+#   ./cleanup.sh --data  - clean all data files (DB and JSON)
 #   ./cleanup.sh --help  - show this help message
 
 set -e
@@ -16,6 +17,7 @@ if [ "$1" == "--help" ]; then
   echo "  ./cleanup.sh --all   - clean all, including database and user data"
   echo "  ./cleanup.sh --db    - reset database only"
   echo "  ./cleanup.sh --root  - clean root directory files that should be in app directory"
+  echo "  ./cleanup.sh --data  - clean all data files (DB and JSON)"
   echo "  ./cleanup.sh --help  - show this help message"
   exit 0
 fi
@@ -39,10 +41,9 @@ if [ "$1" == "--root" ] || [ "$1" == "--all" ]; then
   
   # Move app.db to app/data if it exists at root
   if [ -f "app.db" ]; then
-    echo "Moving app.db to app/data directory..."
-    mkdir -p app/data
-    mv app.db app/data/
-    echo "Created symlink for backward compatibility"
+    echo "Removing app.db from root directory..."
+    rm -f app.db
+    echo "app.db removed from root directory"
   fi
   
   # Remove static and uploads folders from root if they exist
@@ -69,6 +70,32 @@ if [ "$1" == "--root" ] || [ "$1" == "--all" ]; then
   fi
   
   echo "Root directory cleaned."
+fi
+
+# Clean all data files if --data or --all is specified
+if [ "$1" == "--data" ] || [ "$1" == "--all" ]; then
+  echo "Removing all data files (DB and JSON)..."
+  
+  # Remove database files
+  find . -name "*.db" -delete
+  echo "Database files removed."
+  
+  # Remove uploaded JSON files
+  rm -rf app/uploads/*.json
+  echo "Uploaded JSON files removed."
+  
+  # Remove saved data files in user directories
+  rm -rf app/data/user_*
+  echo "User data directories removed."
+  
+  # Remove any other JSON files in data directory
+  rm -f app/data/*.json
+  echo "Data JSON files removed."
+  
+  # Recreate necessary directories
+  mkdir -p app/data
+  mkdir -p app/uploads
+  echo "All data files have been removed."
 fi
 
 # Clean user uploads if --all is specified
@@ -103,4 +130,5 @@ echo "Cleanup completed successfully!"
 echo "Current root directory contents:"
 ls -la | grep -v "^\."
 echo ""
-echo "To deploy with a clean database, run: CLEAN_DB=true ./deploy.sh" 
+echo "To deploy with a clean database, run: CLEAN_DB=true ./deploy.sh"
+echo "To deploy with all data removed, run: CLEAN_DATA=true ./deploy.sh" 

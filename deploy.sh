@@ -1,8 +1,9 @@
 #!/bin/bash
 # Deployment script for Instagram Influencer Analyzer
 # Usage:
-#   ./deploy.sh           - normal deployment
-#   CLEAN_DB=true ./deploy.sh - deploy with database reset
+#   ./deploy.sh                  - normal deployment
+#   CLEAN_DB=true ./deploy.sh    - deploy with database reset
+#   CLEAN_DATA=true ./deploy.sh  - deploy with all data files removed
 
 set -e
 
@@ -10,7 +11,19 @@ echo "=== Instagram Influencer Analyzer Deployment Tool ==="
 
 # Run cleanup script to remove temporary files
 echo "Cleaning up temporary files..."
-./cleanup.sh
+if [ "$CLEAN_DATA" = "true" ]; then
+  echo "CLEAN_DATA=true: Removing all data files (DB and JSON)..."
+  ./cleanup.sh --data
+elif [ "$CLEAN_DB" = "true" ]; then
+  echo "CLEAN_DB=true: Resetting database..."
+  ./cleanup.sh --db
+else
+  ./cleanup.sh
+fi
+
+# Run root cleanup to organize files
+echo "Organizing project structure..."
+./cleanup.sh --root
 
 # Push changes to GitHub to trigger CI/CD
 echo "Committing and pushing changes to GitHub..."
@@ -24,7 +37,16 @@ if [ -n "$(git status --porcelain)" ]; then
   
   # Commit with timestamp
   TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
-  git commit -m "Deployment update $TIMESTAMP"
+  COMMIT_MSG="Deployment update $TIMESTAMP"
+  
+  # Add information about the cleanup performed
+  if [ "$CLEAN_DATA" = "true" ]; then
+    COMMIT_MSG="$COMMIT_MSG (with all data removed)"
+  elif [ "$CLEAN_DB" = "true" ]; then
+    COMMIT_MSG="$COMMIT_MSG (with DB reset)"
+  fi
+  
+  git commit -m "$COMMIT_MSG"
   
   # Push to GitHub
   git push origin main
@@ -32,8 +54,10 @@ if [ -n "$(git status --porcelain)" ]; then
   echo "Changes pushed to GitHub."
   echo "CI/CD pipeline has been triggered."
   
-  # Print message about database reset if CLEAN_DB is set
-  if [ "$CLEAN_DB" = "true" ]; then
+  # Print message about cleanup if enabled
+  if [ "$CLEAN_DATA" = "true" ]; then
+    echo "All data files will be removed during deployment (CLEAN_DATA=true)."
+  elif [ "$CLEAN_DB" = "true" ]; then
     echo "Database will be reset during deployment (CLEAN_DB=true)."
   fi
   
