@@ -14,6 +14,9 @@
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
+    <!-- Socket.IO Client Library -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     
@@ -259,6 +262,31 @@
             transform: translateY(-3px);
             text-decoration: none;
         }
+        
+        /* Progress bar styling */
+        .progress-container {
+            margin: 15px 0;
+        }
+        
+        .progress {
+            height: 25px;
+            border-radius: 12px;
+            background-color: #f3f1fa;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .progress-bar {
+            background: linear-gradient(90deg, #fd1d1d, #833ab4);
+            background-size: 200% auto;
+            animation: gradient-move 2s linear infinite, progress-bar-stripes 1s linear infinite;
+            border-radius: 12px;
+        }
+        
+        .progress-text {
+            margin-top: 8px;
+            font-weight: 500;
+            color: #555;
+        }
     </style>
 </head>
 <body>
@@ -384,6 +412,9 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     
+    <!-- Progress tracking script -->
+    <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
+    
     {% block scripts %}{% endblock %}
     {% block extra_js %}{% endblock %}
     
@@ -399,6 +430,12 @@
                 icon.addEventListener('mouseleave', function() {
                     this.classList.remove('icon-hover');
                 });
+            });
+            
+            // Add progress tracking to forms that need it
+            const analysisForms = document.querySelectorAll('form[action*="analyze"]');
+            analysisForms.forEach(form => {
+                form.setAttribute('data-show-progress', 'true');
             });
         });
     </script>

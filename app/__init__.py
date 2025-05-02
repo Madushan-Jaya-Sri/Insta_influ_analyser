@@ -3,6 +3,10 @@
 
 from flask import Flask
 from flask_login import LoginManager
+from flask_socketio import SocketIO
+
+# Initialize SocketIO object
+socketio = SocketIO()
 
 def create_app():
     """Create and configure the Flask application"""
@@ -15,6 +19,13 @@ def create_app():
     login_manager = LoginManager()
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
+    
+    # Initialize SocketIO with the app
+    socketio.init_app(app, 
+                     cors_allowed_origins="*",
+                     async_mode='gevent',
+                     ping_timeout=60,
+                     ping_interval=25)
     
     # Register blueprints
     from app.routes.auth import auth_bp
@@ -41,5 +52,10 @@ def create_app():
             return f"{value/1000:.1f}K".replace('.0K', 'K')
         else:
             return f"{value/1000000:.1f}M".replace('.0M', 'M')
+    
+    # Initialize socket event handlers
+    with app.app_context():
+        from app.socket_handlers import register_socket_handlers
+        register_socket_handlers(socketio)
     
     return app
