@@ -314,16 +314,16 @@
                             </ul>
                         </li>
                     {% else %}
-                        <li class="nav-item">
+                    <li class="nav-item">
                             <a class="nav-link nav-tab {% if request.endpoint == 'auth.login' %}active{% endif %}" href="{{ url_for('auth.login') }}">
                                 <i class="fas fa-sign-in-alt"></i>Login
                             </a>
-                        </li>
-                        <li class="nav-item">
+                    </li>
+                    <li class="nav-item">
                             <a class="nav-link nav-tab {% if request.endpoint == 'auth.register' %}active{% endif %}" href="{{ url_for('auth.register') }}">
                                 <i class="fas fa-user-plus"></i>Sign Up
                             </a>
-                        </li>
+                    </li>
                     {% endif %}
                 </ul>
             </div>
@@ -386,7 +386,7 @@
     
     {% block scripts %}{% endblock %}
     {% block extra_js %}{% endblock %}
-
+    
     <script>
         // Add active class to current nav item
         document.addEventListener('DOMContentLoaded', function() {

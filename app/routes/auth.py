@@ -19,7 +19,7 @@ auth_bp = Blueprint('auth', __name__)
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('main.index')) # Redirect to main index or dashboard
-
+    
     form = LoginForm()
     if form.validate_on_submit():
         # Use SQLAlchemy query to find the user
@@ -31,21 +31,21 @@ def login():
 
         # Log the user in using Flask-Login
         login_user(user, remember=form.remember_me.data)
-        flash(f'Welcome back, {user.username}!', 'success')
+                flash(f'Welcome back, {user.username}!', 'success')
 
         # Redirect to the page the user was trying to access, or index
         next_page = request.args.get('next')
         if not next_page or url_parse(next_page).netloc != '':
             next_page = url_for('main.index') # Or main.dashboard if that exists
         return redirect(next_page)
-
+    
     return render_template('auth/login.html', title='Sign In', form=form)
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated:
         return redirect(url_for('main.index')) # Redirect to main index or dashboard
-
+    
     form = RegistrationForm()
     if form.validate_on_submit():
         try:
@@ -61,12 +61,12 @@ def register():
             db.session.rollback() # Rollback in case of error
             flash('An error occurred during registration. Please try again.', 'danger')
             current_app.logger.error(f"Registration error: {str(e)}")
-
+    
     return render_template('auth/register.html', title='Register', form=form)
 
 @auth_bp.route('/logout')
 @login_required
 def logout():
-    logout_user()
-    flash('You have been logged out.', 'info')
+        logout_user()
+        flash('You have been logged out.', 'info')
     return redirect(url_for('main.index'))

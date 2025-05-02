@@ -8,7 +8,7 @@
         <div class="col-lg-10 text-center">
             <h1 class="display-4 fw-bold instagram-gradient-animated mb-3">Instagram Influencer Analyzer</h1>
             <p class="lead mb-4 fw-medium text-muted">Uncover powerful insights about Instagram influencers to supercharge your marketing strategy</p>
-            <div class="hero-image mb-4">
+                <div class="hero-image mb-4">
                 <img src="{{ url_for('static', filename='images/brand/momentro-logo.png') }}" alt="Momentro Logo" class="momentro-logo img-fluid" style="max-height: 80px; background: transparent; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);" 
                     onerror="if (this.src.includes('momentro-logo.png')) { this.src='{{ url_for('static', filename='images/brand/momentro_logo.png') }}'; } else { this.src='https://via.placeholder.com/200x80?text=Momentro'; this.onerror=''; }">
             </div>
@@ -170,18 +170,18 @@
 /* Feature card hover effects */
 .feature-card {
     transition: all 0.3s ease-in-out;
-    position: relative;
-    overflow: hidden;
+        position: relative;
+        overflow: hidden;
     border-radius: 16px;
     z-index: 1;
     height: 100%;
-}
-
+    }
+    
 .feature-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
     right: 0;
     bottom: 0;
     background: linear-gradient(135deg, rgba(131, 58, 180, 0.03) 0%, rgba(253, 29, 29, 0.03) 50%, rgba(252, 176, 69, 0.03) 100%);
@@ -189,13 +189,13 @@
     transition: opacity 0.3s ease-in-out;
     opacity: 0;
     border-radius: 16px;
-}
-
+    }
+    
 .feature-card:hover {
     transform: translateY(-6px);
     box-shadow: 0 10px 20px rgba(131, 58, 180, 0.1) !important;
-}
-
+    }
+    
 .feature-card:hover::before {
     opacity: 1;
 }
@@ -203,36 +203,36 @@
 .feature-icon {
     position: relative;
     transition: all 0.3s ease;
-}
-
+    }
+    
 .feature-card:hover .feature-icon {
     transform: scale(1.15);
-}
-
+    }
+    
 .feature-card:hover .instagram-gradient-text {
     animation: gradient-move 1.5s linear infinite;
-}
-
+    }
+    
 .feature-card .card-title {
     position: relative;
-    transition: all 0.3s ease;
-}
-
+        transition: all 0.3s ease;
+    }
+    
 .feature-card:hover .card-title {
     background: linear-gradient(90deg, #fd1d1d, #833ab4);
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-}
-
+    }
+    
 .instagram-gradient-text {
     background: linear-gradient(90deg, #fd1d1d, #833ab4, #fd1d1d, #fcb045);
     background-size: 200% auto;
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-}
-
+    }
+    
 /* Additional card hover effects */
 .login-prompt-card, .upload-form, .info-card {
     transition: all 0.3s ease;
@@ -242,53 +242,53 @@
 .login-prompt-card:hover, .upload-form:hover, .info-card:hover {
     box-shadow: 0 10px 25px rgba(131, 58, 180, 0.12) !important;
     transform: translateY(-5px);
-}
-
+    }
+    
 .custom-alert {
     background-color: #f8f9fa;
     border-left: 4px solid #833ab4;
-    border-radius: 8px;
+        border-radius: 8px;
     padding: 15px;
-    transition: all 0.3s ease;
-}
-
+        transition: all 0.3s ease;
+    }
+    
 .custom-alert:hover {
     background-color: #f3f1fa;
-}
-
-.instruction-list {
+    }
+    
+    .instruction-list {
     padding-left: 20px;
-}
-
-.instruction-list li {
+    }
+    
+    .instruction-list li {
     margin-bottom: 12px;
-    position: relative;
+        position: relative;
     list-style-type: none;
-    padding-left: 40px;
+        padding-left: 40px;
     transition: all 0.25s ease;
 }
 
 .instruction-list li:hover {
     transform: translateX(5px);
-}
-
-.step-number {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    }
+    
+    .step-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
     width: 28px;
     height: 28px;
     background: linear-gradient(90deg, #fd1d1d, #833ab4);
     color: white;
     border-radius: 50%;
     font-weight: bold;
-    position: absolute;
-    left: 0;
+        position: absolute;
+        left: 0;
     transition: all 0.3s ease;
-}
-
+    }
+    
 .instruction-list li:hover .step-number {
     transform: scale(1.15);
-}
+    }
 </style>
 {% endblock %} 
