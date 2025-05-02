@@ -43,55 +43,118 @@ jobs:
             fi
             
             # Create app static directories and ensure brand folder exists
-            mkdir -p app/static/images/brand
+            mkdir -p app/static/images/brand app/static/css
             
-            # Create a simple logo HTML file
-            cat > momentro-logo.html << 'EOF'
-            <html>
-              <head>
-                <style>
-                  body { 
-                    margin: 0; 
-                    background: #fff; 
-                    width: 300px; 
-                    height: 100px; 
-                    display: flex; 
-                    align-items: center; 
-                    justify-content: center; 
-                    font-family: Arial, sans-serif;
-                  }
-                  h1 {
-                    color: #833ab4;
-                    font-size: 24px;
-                  }
-                </style>
-              </head>
-              <body>
-                <h1>MOMENTRO</h1>
-              </body>
-            </html>
+            # Copy the momentro-logo.html file if it exists
+            if [ -f "momentro-logo.html" ]; then
+              echo "Found momentro-logo.html file, using it for logo generation"
+              cp momentro-logo.html momentro-logo.html
+            else
+              # Create a simple logo HTML file if none exists
+              echo "Creating momentro-logo.html file"
+              cat > momentro-logo.html << 'EOF'
+              <html>
+                <head>
+                  <style>
+                    body { 
+                      margin: 0; 
+                      background: #fff; 
+                      width: 300px; 
+                      height: 100px; 
+                      display: flex; 
+                      align-items: center; 
+                      justify-content: center; 
+                      font-family: Arial, sans-serif;
+                    }
+                    h1 {
+                      color: #833ab4;
+                      font-size: 24px;
+                      font-weight: bold;
+                      text-transform: uppercase;
+                      letter-spacing: 2px;
+                    }
+                  </style>
+                </head>
+                <body>
+                  <h1>MOMENTRO</h1>
+                </body>
+              </html>
             EOF
+            fi
+            
+            # Create style.css if it doesn't exist
+            if [ ! -f "app/static/css/style.css" ]; then
+              echo "Creating style.css file"
+              cat > app/static/css/style.css << 'EOF'
+              /* Basic styles */
+              body {
+                font-family: 'Arial', sans-serif;
+                line-height: 1.6;
+                margin: 0;
+                padding: 0;
+                color: #333;
+                background-color: #f8f9fa;
+              }
+              
+              .container {
+                width: 100%;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 15px;
+              }
+              
+              /* Header styles */
+              header {
+                background-color: #fff;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                padding: 10px 0;
+              }
+              
+              .navbar-brand img {
+                max-height: 40px;
+              }
+              
+              /* Custom logo styling */
+              .momentro-logo {
+                font-weight: bold;
+                color: #833ab4;
+                letter-spacing: 2px;
+                text-transform: uppercase;
+              }
+            EOF
+            fi
             
             # Try to install wkhtmltoimage if not available
             if ! which wkhtmltoimage > /dev/null; then
               echo "Installing wkhtmltopdf for image generation..."
-              apt-get update && apt-get install -y wkhtmltopdf || true
+              sudo apt-get update && sudo apt-get install -y wkhtmltopdf || true
             fi
             
             # Try to create PNG from HTML file
             if which wkhtmltoimage > /dev/null; then
               echo "Generating logo using wkhtmltoimage..."
-              wkhtmltoimage momentro-logo.html app/static/images/brand/momentro-logo.png || echo "Failed to create image"
+              wkhtmltoimage --width 300 --height 100 momentro-logo.html app/static/images/brand/momentro-logo.png || echo "Failed to create image"
             fi
             
-            # Fallback to a text file if PNG creation failed
+            # If wkhtmltoimage failed, create a base64 PNG directly
             if [ ! -s app/static/images/brand/momentro-logo.png ]; then
-              echo "Creating placeholder text logo file..."
-              echo "MOMENTRO" > app/static/images/brand/momentro-logo.png
+              echo "Creating base64 encoded PNG logo..."
+              # This is a simple purple "MOMENTRO" text as PNG in base64
+              echo "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" | base64 -d > app/static/images/brand/momentro-logo.png
             fi
             
-            # Create both variants of the file
-            cp app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png || true
+            # Create both variants of the file and ensure they exist
+            cp -f app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png
+            chmod 644 app/static/images/brand/momentro-logo.png app/static/images/brand/momentro_logo.png
+            
+            # Create favicon.ico (using a simple copy of the logo)
+            cp -f app/static/images/brand/momentro-logo.png app/static/favicon.ico
+            chmod 644 app/static/favicon.ico
+            
+            # Debug logo files
+            echo "Checking logo files existence and permissions:"
+            ls -la app/static/images/brand/
+            ls -la app/static/ | grep favicon
             
             # Create WSGI file
             cat > wsgi.py << 'EOF'
