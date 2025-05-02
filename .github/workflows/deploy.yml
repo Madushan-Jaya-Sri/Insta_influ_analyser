@@ -50,6 +50,11 @@ jobs:
             
             # Ensure static directory has proper permissions
             chmod -R 755 app/static
+            chmod 644 app/static/images/brand/momentro-logo.png
+            
+            # Debug: Show static files and permissions
+            echo "Checking static files and permissions:"
+            ls -la app/static/images/brand/
             
             # Clean up unnecessary files from root directory
             echo "Cleaning up unnecessary files from root directory..."
@@ -91,6 +96,16 @@ jobs:
                     expires 30d;
                     try_files $uri =404;
                     access_log off;
+                    add_header Cache-Control "public, max-age=31536000";
+                }
+                
+                # Specific location for brand images
+                location /static/images/brand/ {
+                    alias /app/app/static/images/brand/;
+                    expires 30d;
+                    try_files $uri =404;
+                    access_log off;
+                    add_header Cache-Control "public, max-age=31536000";
                 }
                 
                 location /uploads/ {
@@ -122,9 +137,17 @@ jobs:
             mkdir -p app/uploads app/data app/static/images/brand
             chmod -R 755 app/uploads app/data app/static
             
-            # Debugging: Show static files
+            # Debugging: Show static files and permissions
             echo "Static files in app/static/images/brand:"
-            ls -la app/static/images/brand
+            ls -la app/static/images/brand/
+            
+            # Ensure logo file exists and has correct permissions
+            if [ -f "app/static/images/brand/momentro-logo.png" ]; then
+                echo "Logo file exists, setting permissions..."
+                chmod 644 app/static/images/brand/momentro-logo.png
+            else
+                echo "WARNING: Logo file not found!"
+            fi
             
             # Start Nginx
             echo "Starting Nginx..."
@@ -169,7 +192,8 @@ jobs:
             COPY . .
             
             # Ensure directories have proper permissions
-            RUN chmod -R 755 app/uploads app/data app/static
+            RUN chmod -R 755 app/uploads app/data app/static && \
+                chmod 644 app/static/images/brand/momentro-logo.png
 
             # Setup start script
             COPY start.sh /start.sh
@@ -208,5 +232,10 @@ jobs:
             echo "Checking if container is running..."
             # Verify container is running
             docker ps | grep instagram-analyzer
+            
+            # Test static file access
+            echo "Testing static file access..."
+            sleep 5
+            curl -I http://localhost/static/images/brand/momentro-logo.png
             
             echo "Deployment completed successfully." 
