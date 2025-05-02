@@ -4,6 +4,7 @@
 #   ./cleanup.sh         - clean temporary files only
 #   ./cleanup.sh --all   - clean all, including database and user data
 #   ./cleanup.sh --db    - reset database only
+#   ./cleanup.sh --root  - clean root directory files that should be in app directory
 #   ./cleanup.sh --help  - show this help message
 
 set -e
@@ -14,6 +15,7 @@ if [ "$1" == "--help" ]; then
   echo "  ./cleanup.sh         - clean temporary files only"
   echo "  ./cleanup.sh --all   - clean all, including database and user data"
   echo "  ./cleanup.sh --db    - reset database only"
+  echo "  ./cleanup.sh --root  - clean root directory files that should be in app directory"
   echo "  ./cleanup.sh --help  - show this help message"
   exit 0
 fi
@@ -30,6 +32,44 @@ find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 find . -name ".DS_Store" -delete
 find . -name "*.swp" -delete
 echo "Temporary files cleaned."
+
+# Clean root directory if --root or --all is specified
+if [ "$1" == "--root" ] || [ "$1" == "--all" ]; then
+  echo "Cleaning root directory..."
+  
+  # Move app.db to app/data if it exists at root
+  if [ -f "app.db" ]; then
+    echo "Moving app.db to app/data directory..."
+    mkdir -p app/data
+    mv app.db app/data/
+    echo "Created symlink for backward compatibility"
+  fi
+  
+  # Remove static and uploads folders from root if they exist
+  # (they should be in app directory)
+  if [ -d "static" ] && [ -d "app/static" ]; then
+    echo "Moving files from root static directory to app/static..."
+    cp -r static/* app/static/ 2>/dev/null || true
+    rm -rf static
+    echo "Root static directory removed"
+  fi
+  
+  if [ -d "uploads" ] && [ -d "app/uploads" ]; then
+    echo "Moving files from root uploads directory to app/uploads..."
+    cp -r uploads/* app/uploads/ 2>/dev/null || true
+    rm -rf uploads
+    echo "Root uploads directory removed"
+  fi
+  
+  if [ -d "data" ] && [ -d "app/data" ]; then
+    echo "Moving files from root data directory to app/data..."
+    cp -r data/* app/data/ 2>/dev/null || true
+    rm -rf data
+    echo "Root data directory removed"
+  fi
+  
+  echo "Root directory cleaned."
+fi
 
 # Clean user uploads if --all is specified
 if [ "$1" == "--all" ]; then
@@ -59,4 +99,8 @@ if [ "$1" == "--db" ] || [ "$1" == "--all" ]; then
   echo "Database reset complete."
 fi
 
-echo "Cleanup completed successfully!" 
+echo "Cleanup completed successfully!"
+echo "Current root directory contents:"
+ls -la | grep -v "^\."
+echo ""
+echo "To deploy with a clean database, run: CLEAN_DB=true ./deploy.sh" 
