@@ -42,9 +42,18 @@ RUN pip install --upgrade pip && \
 # Copy application code
 COPY . .
 
-# Make start script executable
+# Make scripts executable
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
+COPY cleanup.sh /cleanup.sh
+RUN chmod +x /cleanup.sh
+
+# Clean up unnecessary files
+RUN find . -name "*.pyc" -delete && \
+    find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true && \
+    find . -name ".DS_Store" -delete && \
+    rm -f *.log *.bak *.tmp && \
+    echo "Cleaned up unnecessary files during build"
 
 # Expose port
 EXPOSE 80

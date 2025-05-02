@@ -156,6 +156,23 @@ jobs:
             ls -la app/static/images/brand/
             ls -la app/static/ | grep favicon
             
+            # Clean up unnecessary files from root directory
+            echo "Cleaning up unnecessary files from root directory..."
+            rm -f momentro-logo.html  # Remove after logo generation
+            rm -f *.log *.bak *.tmp   # Remove log and backup files
+            find . -name "*.pyc" -delete  # Remove Python bytecode files
+            find . -name "__pycache__" -type d -exec rm -rf {} +  # Remove Python cache directories
+            
+            # Clean database or saved data if requested
+            if [ "$CLEAN_DB" = "true" ]; then
+              echo "Cleaning up database and saved data files..."
+              rm -rf app/data/*.db    # Remove SQLite databases
+              mkdir -p app/data       # Ensure directory exists
+              # Initialize an empty database
+              python -c "from run import db, create_app; app = create_app(); with app.app_context(): db.create_all()"
+              echo "Database reset complete."
+            fi
+            
             # Create WSGI file
             cat > wsgi.py << 'EOF'
             #!/usr/bin/env python3
