@@ -53,7 +53,15 @@
         background: linear-gradient(to right, #833ab4, #fd1d1d, #fcb045);
         width: 0%;
         z-index: 2;
-        transition: width 0.3s ease;
+        transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+        background-size: 200% 200%;
+        animation: gradient-shift 4s linear infinite;
+    }
+    
+    @keyframes gradient-shift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
     }
     
     .processing-steps {
@@ -68,6 +76,7 @@
         flex-direction: column;
         align-items: center;
         width: 25%;
+        transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
     }
     
     .step-icon {
@@ -81,7 +90,7 @@
         margin-bottom: 10px;
         position: relative;
         z-index: 3;
-        transition: all 0.3s ease;
+        transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     
     .step-icon i {
@@ -106,6 +115,13 @@
     
     .step-item.active .step-icon i {
         color: white;
+        animation: bounce 0.5s ease;
+    }
+    
+    @keyframes bounce {
+        0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
+        40% {transform: translateY(-8px);}
+        60% {transform: translateY(-4px);}
     }
     
     .step-item.active .step-text {
@@ -274,6 +290,9 @@
         let isPolling = false;
         let sseConnected = false;
         let checkCompleteInterval = null;
+        let currentProgress = 0;
+        let targetProgress = 0;
+        let progressAnimation = null;
         
         // Connect to Server-Sent Events endpoint
         const eventSource = new EventSource("{{ url_for('main.progress_stream') }}");
@@ -338,18 +357,24 @@
             // Update the progress based on the data from the server
             const { step, progress, status, message, complete } = data;
             
-            // Update progress bar
-            progressBar.style.width = `${progress}%`;
+            // Set target progress and animate towards it
+            targetProgress = progress;
+            if (!progressAnimation) {
+                startProgressAnimation();
+            }
             
             // Update step statuses
             updateSteps(step);
             
-            // Update message
+            // Update message with fade effect
             if (message) {
-                processingMessage.textContent = message;
+                fadeOutElement(processingMessage, () => {
+                    processingMessage.textContent = message;
+                    fadeInElement(processingMessage);
+                });
             }
             
-            // Update detail status items
+            // Update detail status items with transition
             updateDetailStatus(step, status);
             
             // If processing is complete, redirect to dashboard
@@ -362,8 +387,67 @@
                     clearInterval(checkCompleteInterval);
                 }
                 
-                redirectToDashboard();
+                // Ensure progress reaches 100% before redirecting
+                targetProgress = 100;
+                // Wait for animation to complete before redirecting
+                setTimeout(redirectToDashboard, 1500);
             }
+        }
+        
+        function startProgressAnimation() {
+            // Cancel any existing animation
+            if (progressAnimation) {
+                cancelAnimationFrame(progressAnimation);
+            }
+            
+            // Function to animate progress bar
+            function animateProgress() {
+                // If current progress is significantly different from target, animate smoothly
+                if (Math.abs(currentProgress - targetProgress) > 0.5) {
+                    // Ease toward target at different speeds based on direction
+                    if (currentProgress < targetProgress) {
+                        // Speed up when progress increases
+                        currentProgress += Math.max(0.5, (targetProgress - currentProgress) / 10);
+                    } else {
+                        // Slow down when progress decreases (rare case)
+                        currentProgress -= (currentProgress - targetProgress) / 20;
+                    }
+                    
+                    // Update progress bar width
+                    progressBar.style.width = `${currentProgress}%`;
+                    
+                    // Continue animation
+                    progressAnimation = requestAnimationFrame(animateProgress);
+                } else {
+                    // When close enough, snap to the exact target
+                    currentProgress = targetProgress;
+                    progressBar.style.width = `${currentProgress}%`;
+                    progressAnimation = null;
+                }
+            }
+            
+            // Start the animation
+            progressAnimation = requestAnimationFrame(animateProgress);
+        }
+        
+        function fadeOutElement(element, callback) {
+            element.style.opacity = '1';
+            element.style.transition = 'opacity 0.3s ease';
+            element.style.opacity = '0';
+            
+            setTimeout(() => {
+                if (callback) callback();
+            }, 300);
+        }
+        
+        function fadeInElement(element) {
+            element.style.opacity = '0';
+            element.style.transition = 'opacity 0.3s ease';
+            
+            // Trigger reflow to ensure transition works
+            void element.offsetWidth;
+            
+            element.style.opacity = '1';
         }
         
         function redirectToDashboard() {
@@ -411,34 +495,55 @@
             // Reset all steps
             for (let i = 1; i <= 4; i++) {
                 const stepEl = document.getElementById(`step${i}`);
-                stepEl.classList.remove('active', 'completed', 'processing');
                 
-                if (i < currentStep) {
-                    stepEl.classList.add('completed');
-                } else if (i === currentStep) {
-                    stepEl.classList.add('active', 'processing');
-                }
+                // Prepare for animation with a slight delay between steps
+                setTimeout(() => {
+                    stepEl.classList.remove('active', 'completed', 'processing');
+                    
+                    if (i < currentStep) {
+                        // This step is completed
+                        stepEl.classList.add('completed');
+                    } else if (i === currentStep) {
+                        // This is the current active step
+                        stepEl.classList.add('active', 'processing');
+                        stepEl.style.transform = 'scale(1.05)';
+                        setTimeout(() => {
+                            stepEl.style.transform = 'scale(1)';
+                        }, 300);
+                    }
+                }, (i - 1) * 100); // Stagger animations by 100ms
             }
         }
         
         function updateDetailStatus(step, statusData) {
             // Clear previous details
-            detailStatus.innerHTML = '';
-            
-            // Select the appropriate detail items based on current step
-            let details = steps.find(s => s.id === `step${step}`)?.details || [];
-            
-            // Create and append status items
-            details.forEach(detail => {
-                const status = statusData && statusData[detail.id] ? statusData[detail.id] : 'pending';
-                const statusClass = getStatusClass(status);
-                const statusIcon = getStatusIcon(status);
+            fadeOutElement(detailStatus, () => {
+                detailStatus.innerHTML = '';
                 
-                const statusElement = document.createElement('div');
-                statusElement.className = `detail-status ${statusClass}`;
-                statusElement.innerHTML = `<i class="${statusIcon}"></i> ${detail.text}`;
+                // Select the appropriate detail items based on current step
+                let details = steps.find(s => s.id === `step${step}`)?.details || [];
                 
-                detailStatus.appendChild(statusElement);
+                // Create and append status items
+                details.forEach((detail, index) => {
+                    const status = statusData && statusData[detail.id] ? statusData[detail.id] : 'pending';
+                    const statusClass = getStatusClass(status);
+                    const statusIcon = getStatusIcon(status);
+                    
+                    const statusElement = document.createElement('div');
+                    statusElement.className = `detail-status ${statusClass}`;
+                    statusElement.innerHTML = `<i class="${statusIcon}"></i> ${detail.text}`;
+                    statusElement.style.opacity = '0';
+                    statusElement.style.transform = 'translateY(10px)';
+                    statusElement.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                    
+                    detailStatus.appendChild(statusElement);
+                    
+                    // Animate in with staggered timing
+                    setTimeout(() => {
+                        statusElement.style.opacity = '1';
+                        statusElement.style.transform = 'translateY(0)';
+                    }, 100 + (index * 150));
+                });
             });
         }
         

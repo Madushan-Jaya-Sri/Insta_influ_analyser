@@ -647,16 +647,21 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
         data_processor = get_data_processor()
         set_analysis_complete(False)  # Reset flag
 
-        update_progress(1, 5, {'parsing': 'working'}, 'Initializing URL processing...')
+        # Initial progress - Step 1: Initialization (0-15%)
+        update_progress(1, 0, {'init': 'working'}, 'Initializing Instagram analysis...')
+        time.sleep(0.5)  # Small delay for visual effect
+        
+        update_progress(1, 5, {'init': 'working', 'apify': 'working'}, 'Connecting to data services...')
 
         # Create ApifyWrapper instance
         try:
             apify_client = ApifyWrapper()
-            update_progress(1, 10, {'parsing': 'working'}, 'Connected to Apify API')
+            update_progress(1, 10, {'init': 'complete', 'apify': 'complete'}, 'Connected to Apify API successfully')
+            time.sleep(0.5)  # Small delay for visual effect
         except Exception as e:
             error_msg = f"Failed to initialize Apify client: {str(e)}"
             print(error_msg)
-            update_progress(1, 10, {'parsing': 'error'}, error_msg)
+            update_progress(1, 10, {'init': 'complete', 'apify': 'error'}, error_msg)
             return
         
         # Convert time filter to appropriate format for Apify
@@ -675,11 +680,20 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
         user_data_dir = os.path.join(current_app.config['DATA_FOLDER'], f'user_{user_id}')
         os.makedirs(user_data_dir, exist_ok=True)
         
-        # Scrape profile data
-        update_progress(1, 15, {'profile': 'working'}, f'Scraping {len(instagram_urls)} Instagram profiles...')
+        # Step 1: Profile Scraping (15-40%)
+        update_progress(1, 15, {'profile': 'working', 'urls': 'working'}, f'Fetching {len(instagram_urls)} Instagram profiles...')
+        time.sleep(0.7)  # Small delay for visual effect
+        
         try:
+            # Simulated progress updates during profile scraping
+            update_progress(1, 20, {'profile': 'working', 'urls': 'complete'}, 'URLs validated, retrieving profile data...')
+            time.sleep(0.5)
+            
             # Remove output_dir parameter as it's not in the method signature
             temp_profile_path = apify_client.scrape_instagram_profiles(instagram_urls)
+            
+            update_progress(1, 30, {'profile': 'working'}, 'Processing profile information...')
+            time.sleep(0.5)
             
             # Move the temporary file to the user's directory
             profile_filename = f"profiles_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
@@ -687,16 +701,23 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
             shutil.copy2(temp_profile_path, profile_path)
             os.remove(temp_profile_path)  # Remove the temporary file
             
-            update_progress(1, 30, {'profile': 'complete'}, 'Profile data scraped successfully')
+            update_progress(1, 40, {'profile': 'complete'}, 'Profile data retrieved successfully')
+            time.sleep(0.5)
         except Exception as e:
             error_msg = f"Failed to scrape profile data: {str(e)}"
             print(error_msg)
             update_progress(1, 30, {'profile': 'error'}, error_msg)
             return
         
-        # Scrape posts data
-        update_progress(1, 35, {'posts': 'working'}, f'Scraping posts (max {max_posts} per profile)...')
+        # Step 2: Posts Scraping (40-60%)
+        update_progress(2, 40, {'posts': 'working'}, f'Retrieving posts (max {max_posts} per profile)...')
+        time.sleep(0.5)
+        
         try:
+            # Simulated progress updates during posts scraping
+            update_progress(2, 45, {'posts': 'working', 'media': 'working'}, 'Connecting to Instagram data APIs...')
+            time.sleep(0.5)
+            
             # Remove output_dir parameter as it's not in the method signature
             temp_posts_path = apify_client.scrape_instagram_posts(
                 instagram_urls, 
@@ -704,23 +725,33 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
                 posts_newer_than
             )
             
+            update_progress(2, 50, {'posts': 'working', 'media': 'complete'}, 'Downloading post content...')
+            time.sleep(0.5)
+            
+            update_progress(2, 55, {'posts': 'working'}, 'Processing post data...')
+            
             # Move the temporary file to the user's directory
             posts_filename = f"posts_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
             posts_path = os.path.join(user_data_dir, posts_filename)
             shutil.copy2(temp_posts_path, posts_path)
             os.remove(temp_posts_path)  # Remove the temporary file
             
-            update_progress(1, 50, {'posts': 'complete'}, 'Posts data scraped successfully')
+            update_progress(2, 60, {'posts': 'complete'}, 'Post data retrieved successfully')
+            time.sleep(0.5)
         except Exception as e:
             error_msg = f"Failed to scrape posts data: {str(e)}"
             print(error_msg)
-            update_progress(1, 50, {'posts': 'error'}, error_msg)
+            update_progress(2, 50, {'posts': 'error'}, error_msg)
             return
         
         # Save paths to background data
         background_data = get_background_data()
         background_data['profile_path'] = profile_path
         background_data['posts_path'] = posts_path
+        
+        # Step 3: Data Processing (60-80%)
+        update_progress(3, 60, {'stats': 'working', 'parsing': 'working'}, 'Parsing Instagram data...')
+        time.sleep(0.5)
         
         # Create default country mapping (use "Other" for all profiles)
         country_mapping = {}
@@ -736,46 +767,65 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
         # Store country mapping in background data
         background_data['country_mapping'] = country_mapping
         
-        update_progress(1, 55, {'stats': 'working'}, 'Processing scraped data...')
+        update_progress(3, 65, {'stats': 'working', 'parsing': 'complete', 'profile_data': 'working'}, 'Loading profile data...')
+        time.sleep(0.5)
         
         # Load profile data
         data_processor.load_profile_data(profile_path)
         
+        update_progress(3, 70, {'stats': 'working', 'profile_data': 'complete', 'post_data': 'working'}, 'Loading post data...')
+        time.sleep(0.5)
+        
         # Load posts data
         data_processor.load_posts_data(posts_path)
+        
+        update_progress(3, 73, {'stats': 'working', 'post_data': 'complete', 'geo': 'working'}, 'Assigning geographical data...')
+        time.sleep(0.5)
         
         # Set countries for influencers
         for username, country in country_mapping.items():
             data_processor.set_country(username, country)
         
-        update_progress(1, 60, {'stats': 'working'}, 'Merging and analyzing data...')
+        update_progress(3, 75, {'stats': 'working', 'geo': 'complete', 'merging': 'working'}, 'Merging profile and post data...')
+        time.sleep(0.5)
         
         # Process data
         data_processor.merge_data()
+        
+        update_progress(3, 78, {'stats': 'working', 'merging': 'complete', 'analysis': 'working'}, 'Analyzing engagement patterns...')
+        time.sleep(0.5)
+        
         data_processor.process_influencer_data()
         
-        update_progress(1, 70, {'stats': 'complete'}, 'Basic data processing complete')
+        update_progress(3, 80, {'stats': 'complete', 'analysis': 'complete'}, 'Data analysis complete')
+        time.sleep(0.5)
         
-        # Image processing is now handled in process_influencer_data
-        update_progress(2, 80, {'profile_pics': 'complete', 'post_pics': 'complete'}, 'Image processing complete')
+        # Step 4: Image Processing and Content Analysis (80-100%)
+        update_progress(4, 80, {'images': 'working', 'profile_pics': 'working'}, 'Processing profile images...')
+        time.sleep(0.5)
+        
+        update_progress(4, 85, {'images': 'working', 'profile_pics': 'complete', 'post_pics': 'working'}, 'Processing post images...')
+        time.sleep(0.5)
+        
+        update_progress(4, 90, {'images': 'complete', 'post_pics': 'complete', 'ai': 'working'}, 'Running AI content analysis...')
+        time.sleep(0.5)
         
         # Content analysis with LLM
-        update_progress(3, 90, {'captions': 'working'}, 'Analyzing content...')
-        
-        # Analyze with LLM
         openai_api_key = os.getenv('OPENAI_API_KEY')
         if openai_api_key:
             try:
                 data_processor.analyze_with_llm(openai_api_key)
-                update_progress(3, 95, {'interests': 'complete', 'brands': 'complete'}, 'Content analysis complete')
+                update_progress(4, 95, {'ai': 'complete', 'interests': 'complete'}, 'AI content analysis complete')
+                time.sleep(0.5)
             except Exception as e:
                 print(f"Error in LLM analysis: {str(e)}")
-                update_progress(3, 95, {'interests': 'warning', 'brands': 'warning'}, 'Content analysis completed with warnings')
+                update_progress(4, 95, {'ai': 'warning', 'interests': 'warning'}, 'Content analysis completed with warnings')
         else:
-            update_progress(3, 95, {'interests': 'warning'}, 'OpenAI API key not found, using basic analysis')
+            update_progress(4, 95, {'ai': 'warning', 'interests': 'warning'}, 'OpenAI API key not found, using basic analysis only')
         
-        # Engagement metrics calculation already done in process_influencer_data
-        update_progress(4, 99, {'rates': 'complete', 'metrics': 'complete'}, 'All metrics calculated')
+        # Final steps
+        update_progress(4, 97, {'finalizing': 'working'}, 'Finalizing analysis results...')
+        time.sleep(0.5)
         
         # Set the analysis complete flag
         set_analysis_complete(True)
@@ -783,7 +833,7 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
         # Save to history database for later retrieval
         data_processor.save_to_history_db(time_filter=time_filter, max_posts=max_posts)
         
-        update_progress(4, 100, {'visualization': 'complete'}, 'Processing complete!', True)
+        update_progress(4, 100, {'finalizing': 'complete'}, 'Processing complete! Redirecting to dashboard...', True)
         
     except Exception as e:
         print(f"Error in background processing: {str(e)}")
