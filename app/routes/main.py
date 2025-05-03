@@ -6,6 +6,7 @@ import threading
 from datetime import datetime
 from functools import wraps
 import shutil # Import shutil for directory operations
+import traceback
 
 from flask import (
     Blueprint, render_template, redirect, url_for, request,
@@ -123,37 +124,54 @@ def get_background_data():
 # Helper function to update progress
 def update_progress(step, progress, status=None, message=None, complete=False):
     # Get current user ID - if there's no authenticated user, we can't update progress
-    if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
-        print("Warning: Attempting to update progress without authenticated user")
+    user_id = None
+    try:
+        if current_user.is_authenticated:
+            user_id = current_user.id
+        else:
+            # Try to get user ID from the stored global state if needed
+            print("User not authenticated in update_progress")
+            return
+    except Exception as e:
+        print(f"Error getting user ID in update_progress: {str(e)}")
         return
-        
-    user_id = current_user.id
-    lock = get_processing_lock()
     
-    with lock:
-        # Ensure the user has a progress data entry
-        if user_id not in progress_data_by_user:
-            progress_data_by_user[user_id] = {
-                'step': 0,
-                'progress': 0,
-                'status': {},
-                'message': 'Initializing...',
-                'complete': False
-            }
-            
-        progress_data = progress_data_by_user[user_id]
-        progress_data['step'] = step
-        progress_data['progress'] = progress
-        if status:
-            if 'status' not in progress_data:
-                progress_data['status'] = {}
-            progress_data['status'].update(status)
-        if message:
-            progress_data['message'] = message
-        progress_data['complete'] = complete
-        # Update global analysis_complete flag when processing finishes
-        if complete:
+    # Check if this is the final update and we're setting complete=True
+    if complete:
+        try:
+            # Set the complete flag directly in the global state too
             set_analysis_complete(True)
+            
+            # When complete, ensure progress is 100%
+            progress = 100
+            
+            # If no message was provided for completion, add a default
+            if not message:
+                message = "Processing complete! Redirecting to dashboard..."
+        except Exception as e:
+            print(f"Error setting complete state: {str(e)}")
+    
+    try:
+        # Ensure progress_data_by_user exists
+        if 'progress_data_by_user' not in globals():
+            global progress_data_by_user
+            progress_data_by_user = {}
+        
+        # Update progress data for this user
+        progress_data_by_user[user_id] = {
+            'step': step,
+            'progress': progress,
+            'status': status or {},
+            'message': message or 'Processing...',
+            'complete': complete
+        }
+        
+        print(f"Progress updated: Step {step}, {progress}%, Message: {message}, Complete: {complete}")
+    except Exception as e:
+        print(f"Error updating progress: {str(e)}")
+        print(f"Step: {step}, Progress: {progress}, Message: {message}, Complete: {complete}")
+        print(f"User ID: {user_id}")
+        traceback.print_exc()
 
 @main_bp.route('/', methods=['GET', 'POST'])
 def index():
@@ -542,6 +560,37 @@ def progress_stream():
     response.headers['Cache-Control'] = 'no-cache'
     response.headers['X-Accel-Buffering'] = 'no'  # Disable nginx buffering
     return response
+
+@main_bp.route('/check-progress')
+@login_required
+def check_progress():
+    """Simple endpoint to check current progress data via AJAX"""
+    try:
+        # Get progress data for the current user
+        user_id = current_user.id
+        
+        # If data doesn't exist for this user, return a default structure
+        if user_id not in progress_data_by_user:
+            return jsonify({
+                'step': 1,
+                'progress': 0,
+                'status': {},
+                'message': 'Initializing...',
+                'complete': False
+            })
+            
+        # Otherwise return the actual progress data
+        return jsonify(progress_data_by_user[user_id])
+        
+    except Exception as e:
+        print(f"Error in check_progress endpoint: {str(e)}")
+        return jsonify({
+            'step': 1,
+            'progress': 0,
+            'status': {'error': 'yes'},
+            'message': f'Error retrieving progress: {str(e)}',
+            'complete': False
+        }), 500
 
 def process_data_in_background(profile_path, posts_path, country_mapping):
     try:
