@@ -174,28 +174,26 @@ jobs:
             echo 'if __name__ == "__main__":' >> wsgi.py
             echo '    app.run()' >> wsgi.py
             
-            # Create Dockerfile.app properly escaped for YAML
-            cat << 'EODOCKERFILE' > Dockerfile.app
-FROM python:3.10-slim
-
-# Set working directory
-WORKDIR /app
-
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 && \
-    pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -r requirements.txt --no-deps
-
-# Copy application code
-COPY . .
-
-# Expose port
-EXPOSE 8000
-
-# Start Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--timeout", "120", "--workers", "3", "--log-level", "info", "wsgi:app"]
-EODOCKERFILE
+            # Create Dockerfile.app line by line to avoid heredoc issues
+            echo 'FROM python:3.10-slim' > Dockerfile.app
+            echo '' >> Dockerfile.app
+            echo '# Set working directory' >> Dockerfile.app
+            echo 'WORKDIR /app' >> Dockerfile.app
+            echo '' >> Dockerfile.app
+            echo '# Install dependencies' >> Dockerfile.app
+            echo 'COPY requirements.txt .' >> Dockerfile.app
+            echo 'RUN pip install --upgrade pip && \' >> Dockerfile.app
+            echo '    pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 && \' >> Dockerfile.app
+            echo '    pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -r requirements.txt --no-deps' >> Dockerfile.app
+            echo '' >> Dockerfile.app
+            echo '# Copy application code' >> Dockerfile.app
+            echo 'COPY . .' >> Dockerfile.app
+            echo '' >> Dockerfile.app
+            echo '# Expose port' >> Dockerfile.app
+            echo 'EXPOSE 8000' >> Dockerfile.app
+            echo '' >> Dockerfile.app
+            echo '# Start Gunicorn' >> Dockerfile.app
+            echo 'CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--timeout", "120", "--workers", "3", "--log-level", "info", "wsgi:app"]' >> Dockerfile.app
             
             # Create nginx.conf
             echo 'server {' > docker-nginx.conf
