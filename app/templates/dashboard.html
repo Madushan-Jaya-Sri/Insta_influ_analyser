@@ -33,7 +33,7 @@
                 <div class="card h-100">
                     <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
                         <div class="d-flex align-items-center">
-                            <img src="{{ url_for('static', filename=influencer.profile_pic_local) }}" alt="{{ influencer.full_name }}" class="profile-pic-sm me-2">
+                            <img src="{% if influencer.profile_pic_local %}{{ url_for('static', filename=influencer.profile_pic_local) }}{% else %}{{ url_for('static', filename='images/profiles/default.jpg') }}{% endif %}" alt="{{ influencer.full_name }}" class="profile-pic-sm me-2">
                             <div>
                                 <h5 class="mb-0">{{ influencer.full_name }}</h5>
                                 <small>@{{ username }}</small>

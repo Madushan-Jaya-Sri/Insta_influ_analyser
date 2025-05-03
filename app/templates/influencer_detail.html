@@ -209,7 +209,7 @@
         <div class="card-body">
             <div class="row align-items-center">
                 <div class="col-md-2 text-center">
-                    <img src="{{ url_for('static', filename=influencer.profile_pic_local) }}" alt="{{ influencer.full_name }}" class="profile-pic">
+                    <img src="{% if influencer.profile_pic_local %}{{ url_for('static', filename=influencer.profile_pic_local) }}{% else %}{{ url_for('static', filename='images/profiles/default.jpg') }}{% endif %}" alt="{{ influencer.full_name }}" class="profile-pic">
                 </div>
                 <div class="col-md-10">
                     <div class="d-flex align-items-center mb-2">

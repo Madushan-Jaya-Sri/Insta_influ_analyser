@@ -180,13 +180,10 @@ jobs:
             echo '# Set working directory' >> Dockerfile.app
             echo 'WORKDIR /app' >> Dockerfile.app
             echo '' >> Dockerfile.app
-            echo '# Install system dependencies for Pillow' >> Dockerfile.app
-            echo 'RUN apt-get update && apt-get install -y libjpeg-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*' >> Dockerfile.app
-            echo '' >> Dockerfile.app
             echo '# Install dependencies' >> Dockerfile.app
             echo 'COPY requirements.txt .' >> Dockerfile.app
             echo 'RUN pip install --upgrade pip && \' >> Dockerfile.app
-            echo '    pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 Pillow && \' >> Dockerfile.app
+            echo '    pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 && \' >> Dockerfile.app
             echo '    pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -r requirements.txt --no-deps' >> Dockerfile.app
             echo '' >> Dockerfile.app
             echo '# Copy application code' >> Dockerfile.app
@@ -258,7 +255,6 @@ jobs:
             echo "      context: ." >> docker-compose.yml
             echo "      dockerfile: Dockerfile.app" >> docker-compose.yml
             echo "    restart: unless-stopped" >> docker-compose.yml
-            echo "    network_mode: host" >> docker-compose.yml
             echo "    environment:" >> docker-compose.yml
             echo "      - SECRET_KEY=${{ secrets.SECRET_KEY }}" >> docker-compose.yml
             echo "      - APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> docker-compose.yml
@@ -267,22 +263,34 @@ jobs:
             echo "      - $DATA_DIR/static:/app/app/static" >> docker-compose.yml
             echo "      - $DATA_DIR/uploads:/app/app/uploads" >> docker-compose.yml
             echo "      - $DATA_DIR/data:/app/app/data" >> docker-compose.yml
+            echo "    dns:" >> docker-compose.yml
+            echo "      - 8.8.8.8" >> docker-compose.yml
+            echo "      - 8.8.4.4" >> docker-compose.yml
+            echo "    networks:" >> docker-compose.yml
+            echo "      - app-network" >> docker-compose.yml
+            echo "      - default" >> docker-compose.yml
             echo "" >> docker-compose.yml
             echo "  nginx:" >> docker-compose.yml
             echo "    container_name: instagram-nginx" >> docker-compose.yml
             echo "    image: nginx:alpine" >> docker-compose.yml
             echo "    restart: unless-stopped" >> docker-compose.yml
-            echo "    network_mode: host" >> docker-compose.yml
+            echo "    ports:" >> docker-compose.yml
+            echo "      - \"80:80\"" >> docker-compose.yml
             echo "    volumes:" >> docker-compose.yml
             echo "      - ./docker-nginx.conf:/etc/nginx/conf.d/default.conf" >> docker-compose.yml
             echo "      - $DATA_DIR/static:/usr/share/nginx/html/static" >> docker-compose.yml
             echo "      - $DATA_DIR/uploads:/usr/share/nginx/html/uploads" >> docker-compose.yml
             echo "    depends_on:" >> docker-compose.yml
             echo "      - flask-app" >> docker-compose.yml
+            echo "    networks:" >> docker-compose.yml
+            echo "      - app-network" >> docker-compose.yml
             echo "" >> docker-compose.yml
             echo "networks:" >> docker-compose.yml
             echo "  app-network:" >> docker-compose.yml
             echo "    driver: bridge" >> docker-compose.yml
+            echo "    # Enable container to access internet" >> docker-compose.yml
+            echo "    external: false" >> docker-compose.yml
+            echo "    name: app-network" >> docker-compose.yml
             
             # Stop and remove any existing containers
             echo "Stopping existing containers..."
