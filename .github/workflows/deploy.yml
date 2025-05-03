@@ -32,12 +32,87 @@ jobs:
             
             # Fix indentation error in auth.py
             echo "Fixing indentation error in auth.py..."
-            sed -i '34s/^        flash/        flash/' app/routes/auth.py
-            sed -i '67s/^        logout_user/    logout_user/' app/routes/auth.py
-            sed -i '68s/^        flash/    flash/' app/routes/auth.py
+            # Create a clean version of the auth.py file
+            cat > app/routes/auth.py << 'EOF'
+            from flask import (
+                Blueprint, render_template, redirect, url_for, request,
+                flash, session, current_app
+            )
+            from flask_login import login_user, logout_user, login_required, current_user
+            from werkzeug.urls import url_parse
+
+            # Updated imports for models and forms
+            from app.forms import LoginForm, RegistrationForm
+            from app.models.user import User
+            from app.models.history import History # Import History if needed here, or likely in main.py
+            from run import db # Import db instance from run.py
+
+            # Keep the blueprint name, but ensure url_prefix matches run.py if set there
+            # The url_prefix='/auth' was added in run.py, so it's correct here.
+            auth_bp = Blueprint('auth', __name__)
+
+            @auth_bp.route('/login', methods=['GET', 'POST'])
+            def login():
+                if current_user.is_authenticated:
+                    return redirect(url_for('main.index')) # Redirect to main index or dashboard
+                
+                form = LoginForm()
+                if form.validate_on_submit():
+                    # Use SQLAlchemy query to find the user
+                    user = db.session.scalar(db.select(User).where(User.username == form.username.data))
+
+                    if user is None or not user.check_password(form.password.data):
+                        flash('Invalid username or password', 'danger')
+                        return redirect(url_for('auth.login'))
+
+                    # Log the user in using Flask-Login
+                    login_user(user, remember=form.remember_me.data)
+                    flash(f'Welcome back, {user.username}!', 'success')
+
+                    # Redirect to the page the user was trying to access, or index
+                    next_page = request.args.get('next')
+                    if not next_page or url_parse(next_page).netloc != '':
+                        next_page = url_for('main.index') # Or main.dashboard if that exists
+                    return redirect(next_page)
+                
+                return render_template('auth/login.html', title='Sign In', form=form)
+
+            @auth_bp.route('/register', methods=['GET', 'POST'])
+            def register():
+                if current_user.is_authenticated:
+                    return redirect(url_for('main.index')) # Redirect to main index or dashboard
+                
+                form = RegistrationForm()
+                if form.validate_on_submit():
+                    try:
+                        user = User(username=form.username.data, email=form.email.data)
+                        user.set_password(form.password.data)
+                        db.session.add(user)
+                        db.session.commit()
+                        flash(f'Congratulations, {user.username}, you are now a registered user!', 'success')
+                        # Log the user in immediately after registration
+                        login_user(user)
+                        return redirect(url_for('main.index')) # Redirect to main index or dashboard
+                    except Exception as e:
+                        db.session.rollback() # Rollback in case of error
+                        flash('An error occurred during registration. Please try again.', 'danger')
+                        current_app.logger.error(f"Registration error: {str(e)}")
+                
+                return render_template('auth/register.html', title='Register', form=form)
+
+            @auth_bp.route('/logout')
+            @login_required
+            def logout():
+                logout_user()
+                flash('You have been logged out.', 'info')
+                return redirect(url_for('main.index'))
+            EOF
             
             # Fix ipython version in requirements.txt
             sed -i 's/ipython==9.1.0/ipython==8.18.1/g' requirements.txt
+            
+            # Create shared volume directories if they don't exist
+            mkdir -p ~/app-data/static ~/app-data/uploads ~/app-data/data
             
             # Fix static directory structure - merge static directories if needed
             echo "Setting up static directories..."
@@ -52,16 +127,19 @@ jobs:
             # Create app static directories and ensure brand folder exists
             mkdir -p app/static/images/brand app/static/css
             
+            # Copy static files to shared volume
+            cp -r app/static/* ~/app-data/static/
+            
             # Remove unnecessary momentro-logo.html if it exists
             rm -f momentro-logo.html
             
             # Ensure static directory has proper permissions
-            chmod -R 755 app/static
-            chmod 644 app/static/images/brand/momentro-logo.png
+            chmod -R 755 ~/app-data/static
+            chmod 644 ~/app-data/static/images/brand/*.png
             
             # Debug: Show static files and permissions
             echo "Checking static files and permissions:"
-            ls -la app/static/images/brand/
+            ls -la ~/app-data/static/images/brand/
             
             # Clean up unnecessary files from root directory
             echo "Cleaning up unnecessary files from root directory..."
@@ -91,43 +169,31 @@ jobs:
                 app.run()
             EOF
             
-            # Make sure nginx.conf uses the correct paths (verify it has the proper content)
-            echo "Content of nginx.conf before building:"
-            cat nginx.conf
+            # Create Flask app's Dockerfile
+            cat > Dockerfile.app << 'EOF'
+            FROM python:3.10-slim
+
+            # Set working directory
+            WORKDIR /app
+
+            # Install dependencies
+            COPY requirements.txt .
+            RUN pip install --upgrade pip && \
+                pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 && \
+                pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -r requirements.txt --no-deps
+
+            # Copy application code
+            COPY . .
             
-            # Create start script with static file handling logic
-            cat > start.sh << 'EOF'
-            #!/bin/bash
-            set -e
+            # Expose port
+            EXPOSE 8000
+
+            # Start Gunicorn
+            CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--timeout", "120", "--workers", "3", "--log-level", "info", "wsgi:app"]
+            EOF
             
-            echo "Setting up application directories..."
-            cd /app
-            
-            # Create necessary directories with proper permissions
-            mkdir -p app/uploads app/data app/static/images/brand
-            chmod -R 755 app/uploads app/data app/static
-            
-            # Debug logo files presence
-            echo "Checking logo files before starting services:"
-            ls -la app/static/images/brand/
-            
-            # Ensure logo file exists and has correct permissions
-            if [ -f "app/static/images/brand/momentro-logo.png" ]; then
-                echo "Logo file exists, setting permissions..."
-                chmod 644 app/static/images/brand/momentro-logo.png
-            else
-                echo "WARNING: Logo file not found!"
-            fi
-            
-            # Make sure nginx configuration is properly installed
-            echo "Verifying nginx configuration is correct..."
-            cat /etc/nginx/conf.d/default.conf
-            
-            # Ensure nginx configuration directory exists
-            mkdir -p /etc/nginx/conf.d/
-            
-            # Make an explicit copy of the nginx configuration with the correct paths
-            cat > /etc/nginx/conf.d/default.conf << 'NGINXCONF'
+            # Create nginx.conf for the separate nginx container
+            cat > docker-nginx.conf << 'EOF'
             server {
                 listen 80;
                 server_name localhost;
@@ -141,14 +207,14 @@ jobs:
                 
                 # Specific locations for exact logo files
                 location = /static/images/brand/momentro-logo.png {
-                    alias /app/app/static/images/brand/momentro-logo.png;
+                    alias /usr/share/nginx/html/static/images/brand/momentro-logo.png;
                     add_header Content-Type image/png;
                     expires 30d;
                     access_log on;
                 }
 
                 location = /static/images/brand/momentro_logo.png {
-                    alias /app/app/static/images/brand/momentro_logo.png;
+                    alias /usr/share/nginx/html/static/images/brand/momentro-logo.png;
                     add_header Content-Type image/png;
                     expires 30d;
                     access_log on;
@@ -156,131 +222,101 @@ jobs:
                 
                 # Serve static files directly
                 location /static/ {
-                    alias /app/app/static/;
+                    alias /usr/share/nginx/html/static/;
                     expires 30d;
                     try_files $uri =404;
                     add_header Cache-Control "public, max-age=31536000";
                 }
                 
                 location /uploads/ {
-                    alias /app/app/uploads/;
+                    alias /usr/share/nginx/html/uploads/;
                     expires 30d;
                 }
                 
                 # Everything else to Flask app
                 location / {
-                    proxy_pass http://127.0.0.1:8000;
+                    proxy_pass http://flask-app:8000;
                     proxy_set_header Host $host;
                     proxy_set_header X-Real-IP $remote_addr;
                     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto $scheme;
                 }
             }
-            NGINXCONF
-            
-            # Start Nginx
-            echo "Starting Nginx..."
-            nginx -t
-            service nginx start
-            
-            # Start Gunicorn
-            echo "Starting Gunicorn with Flask application..."
-            gunicorn --bind 127.0.0.1:8000 --timeout 120 --workers 3 --log-level info --access-logfile - --error-logfile - wsgi:app
-            
-            # Keep container running
-            tail -f /dev/null
             EOF
             
-            chmod +x start.sh
-            
-            # Create Dockerfile with explicit static directory handling
-            cat > Dockerfile << 'EOF'
-            FROM python:3.10-slim
+            # Create docker-compose.yml for managing both containers
+            cat > docker-compose.yml << 'EOF'
+            version: '3'
 
-            # Install required packages
-            RUN apt-get update && apt-get install -y nginx procps && rm -rf /var/lib/apt/lists/*
+            services:
+              flask-app:
+                container_name: instagram-app
+                build:
+                  context: .
+                  dockerfile: Dockerfile.app
+                restart: unless-stopped
+                environment:
+                  - SECRET_KEY=${SECRET_KEY}
+                  - APIFY_API_TOKEN=${APIFY_API_TOKEN}
+                  - OPENAI_API_KEY=${OPENAI_API_KEY}
+                volumes:
+                  - ./app-data/static:/app/app/static
+                  - ./app-data/uploads:/app/app/uploads
+                  - ./app-data/data:/app/app/data
+                networks:
+                  - app-network
 
-            # Set working directory
-            WORKDIR /app
+              nginx:
+                container_name: instagram-nginx
+                image: nginx:alpine
+                restart: unless-stopped
+                ports:
+                  - "80:80"
+                volumes:
+                  - ./docker-nginx.conf:/etc/nginx/conf.d/default.conf
+                  - ./app-data/static:/usr/share/nginx/html/static
+                  - ./app-data/uploads:/usr/share/nginx/html/uploads
+                depends_on:
+                  - flask-app
+                networks:
+                  - app-network
 
-            # Install dependencies
-            COPY requirements.txt .
-            RUN pip install --upgrade pip && \
-                pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 && \
-                pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -r requirements.txt --no-deps
+            networks:
+              app-network:
+                driver: bridge
 
-            # Create static directories first to avoid issues with file permissions
-            RUN mkdir -p app/static/images/brand && \
-                mkdir -p app/uploads app/data
-
-            # Copy Nginx config
-            COPY nginx.conf /etc/nginx/conf.d/default.conf
-            RUN rm -f /etc/nginx/sites-enabled/default
-
-            # Copy application code
-            COPY . .
-            
-            # Ensure directories have proper permissions
-            RUN chmod -R 755 app/uploads app/data app/static && \
-                find app/static/images/brand -type f -name "*.png" -exec chmod 644 {} \;
-
-            # Debug: show what's in the logo directory
-            RUN ls -la app/static/images/brand/
-
-            # Setup start script
-            COPY start.sh /start.sh
-            RUN chmod +x /start.sh
-
-            # Expose port
-            EXPOSE 80
-
-            # Run start script
-            CMD ["/start.sh"]
+            volumes:
+              app-data:
+                driver: local
             EOF
             
-            echo "Building Docker image..."
-            # Build Docker image
-            docker build -t instagram-analyzer:latest .
+            # Create environment file for docker-compose
+            cat > .env << EOF
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            EOF
             
-            echo "Stopping and removing existing container if it exists..."
-            # Stop and remove existing container
+            # Stop any running containers
+            echo "Stopping existing containers..."
             docker stop instagram-analyzer || true
             docker rm instagram-analyzer || true
+            docker stop instagram-app || true
+            docker rm instagram-app || true
+            docker stop instagram-nginx || true
+            docker rm instagram-nginx || true
             
-            echo "Starting new container..."
-            # Run container with static files mounted for persistence
-            docker run -d \
-              --name instagram-analyzer \
-              -p 80:80 \
-              -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
-              -e APIFY_API_TOKEN="${{ secrets.APIFY_API_TOKEN }}" \
-              -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
-              -v $(pwd)/app/static:/app/app/static \
-              -v instagram_data:/app/app/data \
-              -v instagram_uploads:/app/app/uploads \
-              --restart unless-stopped \
-              instagram-analyzer:latest
+            # Build and start containers using docker-compose
+            echo "Building and starting containers with docker-compose..."
+            docker-compose up -d --build
             
-            echo "Checking if container is running..."
-            # Verify container is running
-            docker ps | grep instagram-analyzer
-            CONTAINER_ID=$(docker ps -q --filter name=instagram-analyzer)
-            echo "Container ID: $CONTAINER_ID"
+            # Verify containers are running
+            echo "Verifying containers are running..."
+            docker ps
             
-            # Give the container a moment to start up
-            echo "Waiting for container to initialize..."
-            sleep 10
-            
-            # Verify nginx config in the container
-            echo "Checking nginx configuration in the container:"
-            docker exec -it $CONTAINER_ID cat /etc/nginx/conf.d/default.conf
-            
-            # Check if the logo file exists in the container
-            echo "Checking if logo file exists in the container:"
-            docker exec -it $CONTAINER_ID ls -la /app/app/static/images/brand/
-            
-            # Test static file access
+            # Test static file access after a brief delay
             echo "Testing static file access..."
+            sleep 10
             curl -I http://localhost/static/images/brand/momentro-logo.png
             
-            echo "Deployment completed successfully." 
+            echo "Deployment completed successfully with separate containers." 
