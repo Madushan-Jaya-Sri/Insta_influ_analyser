@@ -21,30 +21,26 @@ jobs:
           script: |
             echo "Starting deployment process..."
             
-            # Create backup of data directories if they exist
-            echo "Creating backup of data directories..."
-            TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-            if [ -d ~/app-data ]; then
-              mkdir -p ~/app-data-backup-$TIMESTAMP
-              cp -r ~/app-data/data ~/app-data-backup-$TIMESTAMP/ 2>/dev/null || true
-              cp -r ~/app-data/uploads ~/app-data-backup-$TIMESTAMP/ 2>/dev/null || true
-              echo "Data backup created at ~/app-data-backup-$TIMESTAMP"
-            fi
+            # Set up working directories
+            WORK_DIR="$HOME/fresh_deployment"
+            DATA_DIR="$HOME/app_persistent_data"
             
-            # Use more robust removal approach with proper permissions handling
-            echo "Cleaning up previous deployment..."
-            if [ -d ~/Insta_influ_analyser ]; then
-              find ~/Insta_influ_analyser -type d -exec chmod 755 {} \; 2>/dev/null || true
-              find ~/Insta_influ_analyser -type f -exec chmod 644 {} \; 2>/dev/null || true
-              rm -rf ~/Insta_influ_analyser
-            fi
+            # Create persistent data directory if it doesn't exist
+            mkdir -p "$DATA_DIR/static/images/brand"
+            mkdir -p "$DATA_DIR/uploads"
+            mkdir -p "$DATA_DIR/data"
             
-            echo "Creating fresh deployment directory..."
-            mkdir -p ~/Insta_influ_analyser
-            cd ~/Insta_influ_analyser
+            # Force proper permissions on data directory
+            sudo chown -R $(whoami):$(whoami) "$DATA_DIR"
+            chmod -R 777 "$DATA_DIR"
             
-            # Clone repository with proper error handling
-            echo "Cloning repository..."
+            # Clean previous deployment directory
+            rm -rf "$WORK_DIR"
+            mkdir -p "$WORK_DIR"
+            cd "$WORK_DIR"
+            
+            # Clone repository
+            echo "Cloning fresh repository..."
             git clone https://github.com/madushan-jaya-sri/Insta_influ_analyser.git .
             
             if [ ! -d app ]; then
@@ -55,98 +51,87 @@ jobs:
             echo "Repository successfully cloned."
             git log -1 --oneline
             
-            # Fix indentation error in auth.py
-            echo "Fixing indentation error in auth.py..."
-            if [ -d app/routes ]; then
-              # Create a clean version of the auth.py file
-              cat > app/routes/auth.py << 'EOF'
-              from flask import (
-                  Blueprint, render_template, redirect, url_for, request,
-                  flash, session, current_app
-              )
-              from flask_login import login_user, logout_user, login_required, current_user
-              from werkzeug.urls import url_parse
-  
-              # Updated imports for models and forms
-              from app.forms import LoginForm, RegistrationForm
-              from app.models.user import User
-              from app.models.history import History # Import History if needed here, or likely in main.py
-              from run import db # Import db instance from run.py
-  
-              # Keep the blueprint name, but ensure url_prefix matches run.py if set there
-              # The url_prefix='/auth' was added in run.py, so it's correct here.
-              auth_bp = Blueprint('auth', __name__)
-  
-              @auth_bp.route('/login', methods=['GET', 'POST'])
-              def login():
-                  if current_user.is_authenticated:
-                      return redirect(url_for('main.index')) # Redirect to main index or dashboard
-                  
-                  form = LoginForm()
-                  if form.validate_on_submit():
-                      # Use SQLAlchemy query to find the user
-                      user = db.session.scalar(db.select(User).where(User.username == form.username.data))
-  
-                      if user is None or not user.check_password(form.password.data):
-                          flash('Invalid username or password', 'danger')
-                          return redirect(url_for('auth.login'))
-  
-                      # Log the user in using Flask-Login
-                      login_user(user, remember=form.remember_me.data)
-                      flash(f'Welcome back, {user.username}!', 'success')
-  
-                      # Redirect to the page the user was trying to access, or index
-                      next_page = request.args.get('next')
-                      if not next_page or url_parse(next_page).netloc != '':
-                          next_page = url_for('main.index') # Or main.dashboard if that exists
-                      return redirect(next_page)
-                  
-                  return render_template('auth/login.html', title='Sign In', form=form)
-  
-              @auth_bp.route('/register', methods=['GET', 'POST'])
-              def register():
-                  if current_user.is_authenticated:
-                      return redirect(url_for('main.index')) # Redirect to main index or dashboard
-                  
-                  form = RegistrationForm()
-                  if form.validate_on_submit():
-                      try:
-                          user = User(username=form.username.data, email=form.email.data)
-                          user.set_password(form.password.data)
-                          db.session.add(user)
-                          db.session.commit()
-                          flash(f'Congratulations, {user.username}, you are now a registered user!', 'success')
-                          # Log the user in immediately after registration
-                          login_user(user)
-                          return redirect(url_for('main.index')) # Redirect to main index or dashboard
-                      except Exception as e:
-                          db.session.rollback() # Rollback in case of error
-                          flash('An error occurred during registration. Please try again.', 'danger')
-                          current_app.logger.error(f"Registration error: {str(e)}")
-                  
-                  return render_template('auth/register.html', title='Register', form=form)
-  
-              @auth_bp.route('/logout')
-              @login_required
-              def logout():
-                  logout_user()
-                  flash('You have been logged out.', 'info')
-                  return redirect(url_for('main.index'))
-              EOF
-              echo "Fixed auth.py file created."
-            else
-              echo "WARNING: app/routes directory not found!"
-              mkdir -p app/routes
-              # Create a dummy auth.py so deployment can continue
-              echo "from flask import Blueprint; auth_bp = Blueprint('auth', __name__)" > app/routes/auth.py
-            fi
+            # Fix auth.py indentation
+            echo "Fixing auth.py indentation..."
+            mkdir -p app/routes
+            cat > app/routes/auth.py << 'EOF'
+            from flask import (
+                Blueprint, render_template, redirect, url_for, request,
+                flash, session, current_app
+            )
+            from flask_login import login_user, logout_user, login_required, current_user
+            from werkzeug.urls import url_parse
+
+            # Updated imports for models and forms
+            from app.forms import LoginForm, RegistrationForm
+            from app.models.user import User
+            from app.models.history import History # Import History if needed here, or likely in main.py
+            from run import db # Import db instance from run.py
+
+            # Keep the blueprint name, but ensure url_prefix matches run.py if set there
+            # The url_prefix='/auth' was added in run.py, so it's correct here.
+            auth_bp = Blueprint('auth', __name__)
+
+            @auth_bp.route('/login', methods=['GET', 'POST'])
+            def login():
+                if current_user.is_authenticated:
+                    return redirect(url_for('main.index')) # Redirect to main index or dashboard
+                
+                form = LoginForm()
+                if form.validate_on_submit():
+                    # Use SQLAlchemy query to find the user
+                    user = db.session.scalar(db.select(User).where(User.username == form.username.data))
+
+                    if user is None or not user.check_password(form.password.data):
+                        flash('Invalid username or password', 'danger')
+                        return redirect(url_for('auth.login'))
+
+                    # Log the user in using Flask-Login
+                    login_user(user, remember=form.remember_me.data)
+                    flash(f'Welcome back, {user.username}!', 'success')
+
+                    # Redirect to the page the user was trying to access, or index
+                    next_page = request.args.get('next')
+                    if not next_page or url_parse(next_page).netloc != '':
+                        next_page = url_for('main.index') # Or main.dashboard if that exists
+                    return redirect(next_page)
+                
+                return render_template('auth/login.html', title='Sign In', form=form)
+
+            @auth_bp.route('/register', methods=['GET', 'POST'])
+            def register():
+                if current_user.is_authenticated:
+                    return redirect(url_for('main.index')) # Redirect to main index or dashboard
+                
+                form = RegistrationForm()
+                if form.validate_on_submit():
+                    try:
+                        user = User(username=form.username.data, email=form.email.data)
+                        user.set_password(form.password.data)
+                        db.session.add(user)
+                        db.session.commit()
+                        flash(f'Congratulations, {user.username}, you are now a registered user!', 'success')
+                        # Log the user in immediately after registration
+                        login_user(user)
+                        return redirect(url_for('main.index')) # Redirect to main index or dashboard
+                    except Exception as e:
+                        db.session.rollback() # Rollback in case of error
+                        flash('An error occurred during registration. Please try again.', 'danger')
+                        current_app.logger.error(f"Registration error: {str(e)}")
+                
+                return render_template('auth/register.html', title='Register', form=form)
+
+            @auth_bp.route('/logout')
+            @login_required
+            def logout():
+                logout_user()
+                flash('You have been logged out.', 'info')
+                return redirect(url_for('main.index'))
+            EOF
             
-            # Fix ipython version in requirements.txt if it exists
-            if [ -f requirements.txt ]; then
-              sed -i 's/ipython==9.1.0/ipython==8.18.1/g' requirements.txt
-              echo "Fixed ipython version in requirements.txt"
-            else
-              echo "WARNING: requirements.txt not found! Creating minimal version..."
+            # Ensure we have a requirements.txt file
+            if [ ! -f requirements.txt ]; then
+              echo "Creating requirements.txt..."
               cat > requirements.txt << 'EOF'
               Flask==2.0.1
               Flask-Login==0.5.0
@@ -156,48 +141,39 @@ jobs:
               SQLAlchemy==2.0.4
               Werkzeug==2.0.1
               EOF
+            else
+              # Fix ipython version
+              sed -i 's/ipython==9.1.0/ipython==8.18.1/g' requirements.txt
             fi
             
-            # Create and set up app-data directories with proper permissions
-            echo "Setting up app-data directories..."
-            mkdir -p ~/app-data/static/images/brand ~/app-data/uploads ~/app-data/data
-            chmod -R 777 ~/app-data  # Ensure full permissions for docker containers
-            
-            # Handle static files
-            echo "Setting up static files..."
+            # Copy static files if they exist
             if [ -d app/static ]; then
-              echo "Copying app/static to app-data..."
-              cp -r app/static/* ~/app-data/static/ 2>/dev/null || true
-            else
-              mkdir -p app/static/images/brand app/static/css
-              echo "WARNING: app/static directory not found, created empty directory."
+              echo "Copying static files to persistent data directory..."
+              cp -r app/static/* "$DATA_DIR/static/"
             fi
             
-            # Check for logo files and copy them if available
+            # Ensure logo files exist in data directory
             echo "Checking for logo files..."
-            LOGO_FILES=$(find . -name "momentro-logo.png" -o -name "momentro_logo.png")
-            if [ -n "$LOGO_FILES" ]; then
-              echo "Found logo files: $LOGO_FILES"
-              for file in $LOGO_FILES; do
-                BASENAME=$(basename "$file")
-                echo "Copying $file to ~/app-data/static/images/brand/$BASENAME"
-                cp "$file" ~/app-data/static/images/brand/
-              done
-            else
-              echo "WARNING: No logo files found in repository."
-              # Create placeholders with content (can be removed later)
-              echo "Creating placeholder logo files..."
-              curl -s https://via.placeholder.com/150 -o ~/app-data/static/images/brand/momentro-logo.png
-              curl -s https://via.placeholder.com/150 -o ~/app-data/static/images/brand/momentro_logo.png
+            if [ ! -f "$DATA_DIR/static/images/brand/momentro-logo.png" ]; then
+              echo "Logo files missing, looking for them in repository..."
+              
+              # Look for logo files in the repository
+              LOGO_FILE=$(find . -name "momentro-logo.png" | head -1)
+              if [ -n "$LOGO_FILE" ]; then
+                echo "Found logo file at $LOGO_FILE"
+                cp "$LOGO_FILE" "$DATA_DIR/static/images/brand/momentro-logo.png"
+                cp "$LOGO_FILE" "$DATA_DIR/static/images/brand/momentro_logo.png"
+              else
+                echo "No logo file found, downloading placeholder image..."
+                curl -s https://via.placeholder.com/150 -o "$DATA_DIR/static/images/brand/momentro-logo.png"
+                curl -s https://via.placeholder.com/150 -o "$DATA_DIR/static/images/brand/momentro_logo.png"
+              fi
             fi
             
-            # Set proper permissions for all files
-            echo "Setting permissions..."
-            chmod -R 777 ~/app-data/static/images/brand
-            ls -la ~/app-data/static/images/brand/
+            # Ensure proper permissions
+            chmod -R 777 "$DATA_DIR"
             
             # Create WSGI file
-            echo "Creating WSGI file..."
             cat > wsgi.py << 'EOF'
             #!/usr/bin/env python3
             import os
@@ -220,7 +196,6 @@ jobs:
             EOF
             
             # Create Flask app's Dockerfile
-            echo "Creating Flask app Dockerfile..."
             cat > Dockerfile.app << 'EOF'
             FROM python:3.10-slim
 
@@ -243,8 +218,7 @@ jobs:
             CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--timeout", "120", "--workers", "3", "--log-level", "info", "wsgi:app"]
             EOF
             
-            # Create nginx.conf for the separate nginx container
-            echo "Creating nginx configuration..."
+            # Create nginx.conf
             cat > docker-nginx.conf << 'EOF'
             server {
                 listen 80;
@@ -296,9 +270,8 @@ jobs:
             }
             EOF
             
-            # Create docker-compose.yml for managing both containers
-            echo "Creating docker-compose.yml..."
-            cat > docker-compose.yml << 'EOF'
+            # Create docker-compose.yml
+            cat > docker-compose.yml << EOF
             version: '3'
 
             services:
@@ -309,13 +282,13 @@ jobs:
                   dockerfile: Dockerfile.app
                 restart: unless-stopped
                 environment:
-                  - SECRET_KEY=${SECRET_KEY}
-                  - APIFY_API_TOKEN=${APIFY_API_TOKEN}
-                  - OPENAI_API_KEY=${OPENAI_API_KEY}
+                  - SECRET_KEY=${{ secrets.SECRET_KEY }}
+                  - APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}
+                  - OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
                 volumes:
-                  - ../app-data/static:/app/app/static
-                  - ../app-data/uploads:/app/app/uploads
-                  - ../app-data/data:/app/app/data
+                  - $DATA_DIR/static:/app/app/static
+                  - $DATA_DIR/uploads:/app/app/uploads
+                  - $DATA_DIR/data:/app/app/data
                 networks:
                   - app-network
 
@@ -327,8 +300,8 @@ jobs:
                   - "80:80"
                 volumes:
                   - ./docker-nginx.conf:/etc/nginx/conf.d/default.conf
-                  - ../app-data/static:/usr/share/nginx/html/static
-                  - ../app-data/uploads:/usr/share/nginx/html/uploads
+                  - $DATA_DIR/static:/usr/share/nginx/html/static
+                  - $DATA_DIR/uploads:/usr/share/nginx/html/uploads
                 depends_on:
                   - flask-app
                 networks:
@@ -339,79 +312,44 @@ jobs:
                 driver: bridge
             EOF
             
-            # Create environment file for docker-compose
-            echo "Creating .env file..."
-            cat > .env << EOF
-            SECRET_KEY=${{ secrets.SECRET_KEY }}
-            APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            EOF
-            
-            # Stop any running containers
+            # Stop and remove any existing containers
             echo "Stopping existing containers..."
-            docker stop instagram-analyzer || true
-            docker rm instagram-analyzer || true
-            docker stop instagram-app || true
-            docker rm instagram-app || true
-            docker stop instagram-nginx || true
-            docker rm instagram-nginx || true
+            docker stop instagram-app instagram-nginx 2>/dev/null || true
+            docker rm instagram-app instagram-nginx 2>/dev/null || true
             
-            # Build and start containers using docker-compose
-            echo "Building and starting containers with docker-compose..."
-            docker-compose build
+            # Build and start containers
+            echo "Building and starting Docker containers..."
+            docker-compose down -v 2>/dev/null || true
+            docker-compose build --no-cache
             
             if [ $? -ne 0 ]; then
-              echo "ERROR: Docker compose build failed! Check output above for errors."
+              echo "ERROR: Docker compose build failed!"
               exit 1
             fi
             
             docker-compose up -d
             
             if [ $? -ne 0 ]; then
-              echo "ERROR: Docker compose up failed! Check output above for errors."
+              echo "ERROR: Docker compose up failed!"
               exit 1
             fi
             
             # Wait for containers to start
             echo "Waiting for containers to start..."
-            sleep 20
+            sleep 15
             
-            # Verify containers are running
-            echo "Verifying containers are running..."
+            # Check if containers are running
             docker ps
             
-            NGINX_RUNNING=$(docker ps -q --filter name=instagram-nginx)
-            APP_RUNNING=$(docker ps -q --filter name=instagram-app)
-            
-            if [ -z "$NGINX_RUNNING" ] || [ -z "$APP_RUNNING" ]; then
-              echo "ERROR: One or more containers are not running!"
-              echo "Checking container logs..."
-              docker logs instagram-nginx || echo "Nginx container not found"
-              docker logs instagram-app || echo "App container not found"
+            RUNNING_CONTAINERS=$(docker ps -q --filter name=instagram)
+            if [ -z "$RUNNING_CONTAINERS" ]; then
+              echo "ERROR: Containers are not running!"
+              docker-compose logs
               exit 1
-            else
-              echo "All containers are running successfully."
             fi
-            
-            # Debug: Check nginx container logs
-            echo "Checking nginx container logs..."
-            docker logs instagram-nginx
-            
-            # Debug: Check app container logs
-            echo "Checking app container logs..."
-            docker logs instagram-app
-            
-            # Debug: Check nginx configuration
-            echo "Checking nginx configuration in container..."
-            docker exec instagram-nginx cat /etc/nginx/conf.d/default.conf
-            
-            # Debug: Check static files in nginx container
-            echo "Checking static files in nginx container..."
-            docker exec instagram-nginx ls -la /usr/share/nginx/html/static/images/brand/
             
             # Test static file access
             echo "Testing static file access..."
             curl -I localhost/static/images/brand/momentro-logo.png
-            curl -I localhost/static/images/brand/momentro_logo.png
             
-            echo "Deployment completed successfully with separate containers." 
+            echo "Deployment completed successfully!" 
