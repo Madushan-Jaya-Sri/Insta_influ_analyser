@@ -30,6 +30,12 @@ jobs:
             cd ~/Insta_influ_analyser
             echo "Repository freshly cloned"
             
+            # Fix indentation error in auth.py
+            echo "Fixing indentation error in auth.py..."
+            sed -i '34s/^        flash/        flash/' app/routes/auth.py
+            sed -i '67s/^        logout_user/    logout_user/' app/routes/auth.py
+            sed -i '68s/^        flash/    flash/' app/routes/auth.py
+            
             # Fix ipython version in requirements.txt
             sed -i 's/ipython==9.1.0/ipython==8.18.1/g' requirements.txt
             
