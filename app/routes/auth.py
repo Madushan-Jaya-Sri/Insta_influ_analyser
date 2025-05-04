@@ -31,7 +31,7 @@ def login():
 
         # Log the user in using Flask-Login
         login_user(user, remember=form.remember_me.data)
-                flash(f'Welcome back, {user.username}!', 'success')
+        flash(f'Welcome back, {user.username}!', 'success')
 
         # Redirect to the page the user was trying to access, or index
         next_page = request.args.get('next')
@@ -67,6 +67,6 @@ def register():
 @auth_bp.route('/logout')
 @login_required
 def logout():
-        logout_user()
-        flash('You have been logged out.', 'info')
+    logout_user()
+    flash('You have been logged out.', 'info')
     return redirect(url_for('main.index'))

@@ -14,7 +14,6 @@ from collections import defaultdict, Counter
 import requests
 import shutil # Added for clear_data potential image deletion
 import uuid # For unique run IDs
-from PIL import Image, ImageDraw, ImageFont
 
 # Define the path for the data file relative to the script's location
 # This assumes run.py is in the root and calls create_app which sets up paths
@@ -378,37 +377,11 @@ class DataProcessor:
                 return rel_path
             else:
                 print(f"Failed to download profile image for {username}: Status code {response.status_code}")
-                # Create a fallback image
-                self._create_fallback_image(local_path)
-                return rel_path
+                return None
         except Exception as e:
             print(f"Error downloading profile image for {username}: {str(e)}")
-            # Create a fallback image
-            self._create_fallback_image(local_path)
-            return rel_path
-
-    def _create_fallback_image(self, local_path):
-        """Create a fallback image when profile picture download fails"""
-        try:
-            # Create a simple colored placeholder image
-            # Create a 150x150 image with a light gray background
-            img = Image.new('RGB', (150, 150), color=(240, 240, 240))
-            draw = ImageDraw.Draw(img)
-            
-            # Try to load a font, fall back to default if not available
-            try:
-                font = ImageFont.truetype("Arial", 40)
-            except:
-                font = ImageFont.load_default()
-            
-            # Add text
-            draw.text((75, 75), "?", fill=(200, 200, 200), font=font, anchor="mm")
-            
-            # Save the image
-            img.save(local_path, 'JPEG')
-            print(f"Created fallback image at {local_path}")
-        except Exception as e:
-            print(f"Error creating fallback image: {str(e)}")
+            traceback.print_exc()
+            return None
 
     def download_post_image(self, post_id, display_url):
         """Download post image using post ID as the filename"""
