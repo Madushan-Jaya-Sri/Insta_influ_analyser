@@ -274,15 +274,20 @@ class DataProcessor:
 
     def load_profile_data(self, file_path):
         """Load the Instagram profile data JSON file"""
-        # Clear existing data before loading new profiles
+        # Only clear working data variables, not the final results
         self.profile_data = None
         self.posts_data = None
         self.merged_data = None
-        # Don't clear influencers_data here if we want to merge with existing persistent data
-        # If each load should replace everything, uncomment the next two lines:
-        # self.influencers_data = {}
-        # self.countries = {}
-        print("Cleared previous in-memory data before loading new profiles.")
+        
+        # Maintain existing influencers_data to accumulate profiles across sessions
+        # Initialize with empty dictionaries if they don't exist yet
+        if not hasattr(self, 'influencers_data') or self.influencers_data is None:
+            self.influencers_data = {}
+            
+        if not hasattr(self, 'countries') or self.countries is None:
+            self.countries = {}
+            
+        print("Loading new profile data while preserving existing influencers.")
         
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -469,349 +474,190 @@ class DataProcessor:
         return local_paths
     
     def process_influencer_data(self):
-        """Process data for each influencer"""
-        if self.merged_data is None:
-            raise Exception("Data must be merged first")
+        """Process the merged data to generate the influencers report"""
+        if self.merged_data is None and self.profile_data is None:
+            raise Exception("No data to process. Please load profile and posts data first.")
         
-        print("Starting process_influencer_data")
-        influencers = {}
-        
-        # Group data by username
         try:
-            grouped_data = self.merged_data.groupby('username')
-            print(f"Found {len(grouped_data)} influencer groups")
+            # Create a copy of the existing influencers_data to preserve old profiles
+            influencers = self.influencers_data.copy() if hasattr(self, 'influencers_data') and self.influencers_data else {}
             
-            for username, group in grouped_data:
-                print(f"Processing influencer: {username}")
-                if username not in self.countries:
-                    print(f"Skipping {username} - no country set")
-                    continue
-                    
-                # Basic information
-                print(f"Creating basic info for {username}")
-                try:
-                    # Check for any problematic data types
-                    for col in ['followersCount', 'followsCount', 'postsCount']:
-                        val = group[col].iloc[0]
-                        print(f"{username} {col}: {val} (type: {type(val)})")
-                        if isinstance(val, np.ndarray):
-                            print(f"Warning: {col} is an ndarray with shape {val.shape}")
-                    
-                    influencer = {
-                        'username': username,
-                        'country': self.countries.get(username, ''),
-                        'full_name': group['fullName'].iloc[0],
-                        'biography': group['biography'].iloc[0],
-                        'business_category': group['businessCategoryName'].iloc[0],
-                        'followers_count': group['followersCount'].iloc[0],
-                        'follows_count': group['followsCount'].iloc[0],
-                        'posts_count': group['postsCount'].iloc[0],
-                        'profile_pic_url': group['profilePicUrl'].iloc[0],
-                        'is_verified': bool(group['verified'].iloc[0]),
-                        'external_url': group.get('externalUrl', {}).iloc[0] if 'externalUrl' in group.columns else None,
-                    }
-                    
-                    # Ensure numeric values are scalar
-                    for key in ['followers_count', 'follows_count', 'posts_count']:
-                        if hasattr(influencer[key], 'item'):
-                            print(f"Converting {key} from {type(influencer[key])} to scalar")
-                            influencer[key] = influencer[key].item()
-                    
-                except Exception as e:
-                    print(f"Error creating basic info for {username}: {str(e)}")
-                    traceback.print_exc()
-                    continue
+            # Get unique influencers from profile data
+            if self.profile_data is not None:
+                print(f"Processing {len(self.profile_data)} profiles")
                 
-                # Download profile picture
-                if pd.notna(influencer['profile_pic_url']):
-                    influencer['profile_pic_local'] = self.download_profile_image(username, influencer['profile_pic_url'])
-                    print(f"Downloaded profile picture for {username}: {influencer['profile_pic_local']}")
-                else:
-                    influencer['profile_pic_local'] = None
-                
-                # Process posts
-                posts = []
-                all_captions = []
-                all_hashtags = []
-                all_mentions = []
-                engagement_data = []
-                
-                print(f"Processing {len(group)} posts for {username}")
-                for idx, (_, post) in enumerate(group.iterrows()):
-                    if idx % 20 == 0:
-                        print(f"Processing post {idx+1}/{len(group)} for {username}")
+                # Process each profile
+                for _, profile in self.profile_data.iterrows():
+                    username = profile['username']
                     
-                    # Combine all captions for LLM analysis
-                    if pd.notna(post.get('caption')):
-                        all_captions.append(post['caption'])
+                    # For new profiles or to update existing ones
+                    print(f"Processing profile: {username}")
                     
-                    # SAFELY process hashtags - NO ambiguous truth value checks
-                    try:
-                        hashtags = post.get('hashtags')
-                        # Only proceed if hashtags exists
-                        if hashtags is not None:
-                            # Handle different data types without any ambiguous truth checks
-                            if isinstance(hashtags, list):
-                                all_hashtags.extend(hashtags)
-                            elif isinstance(hashtags, np.ndarray):
-                                if hashtags.size == 1:
-                                    # Single item array - extract and use if it's a list
-                                    item = hashtags.item()
-                                    if isinstance(item, list):
-                                        all_hashtags.extend(item)
-                                    else:
-                                        # If a single non-list item, add directly
-                                        all_hashtags.append(item)
-                                elif hashtags.size > 1:
-                                    # Multi-item array - convert to list
-                                    all_hashtags.extend(hashtags.tolist())
-                    except Exception as e:
-                        print(f"Error processing hashtags for post {idx}: {str(e)}")
-                        traceback.print_exc()
+                    # Initialize influencer data structure if this is a new profile
+                    # or preserve existing structure if it's being updated
+                    if username not in influencers:
+                        # New profile - create new entry
+                        influencers[username] = {
+                            'username': username,
+                            'full_name': profile.get('fullName', ''),
+                            'biography': profile.get('biography', ''),
+                            'external_url': profile.get('externalUrl', ''),
+                            'followers_count': profile.get('followersCount', 0),
+                            'follows_count': profile.get('followsCount', 0),
+                            'is_verified': profile.get('isVerified', False),
+                            'posts_count': profile.get('postsCount', 0),
+                            'profile_pic_url': profile.get('profilePicUrl', ''),
+                            'business_category': profile.get('categoryName', ''),
+                            'country': self.countries.get(username, 'Unknown'),
+                            'processed_at': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'posts': []  # Will be populated with post data
+                        }
+                    else:
+                        # Existing profile - update basic info but preserve advanced metrics
+                        # and analyses that may have been previously calculated
+                        existing = influencers[username]
+                        existing.update({
+                            'full_name': profile.get('fullName', existing.get('full_name', '')),
+                            'biography': profile.get('biography', existing.get('biography', '')),
+                            'external_url': profile.get('externalUrl', existing.get('external_url', '')),
+                            'followers_count': profile.get('followersCount', existing.get('followers_count', 0)),
+                            'follows_count': profile.get('followsCount', existing.get('follows_count', 0)),
+                            'is_verified': profile.get('isVerified', existing.get('is_verified', False)),
+                            'posts_count': profile.get('postsCount', existing.get('posts_count', 0)),
+                            'profile_pic_url': profile.get('profilePicUrl', existing.get('profile_pic_url', '')),
+                            'business_category': profile.get('categoryName', existing.get('business_category', '')),
+                            'country': self.countries.get(username, existing.get('country', 'Unknown')),
+                            'processed_at': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        })
+                        
+                        # Keep track of previous posts if any
+                        if 'posts' not in existing:
+                            existing['posts'] = []
                     
-                    # SAFELY process mentions - NO ambiguous truth value checks
-                    try:
-                        mentions = post.get('mentions')
-                        # Only proceed if mentions exists
-                        if mentions is not None:
-                            # Handle different data types without any ambiguous truth checks
-                            if isinstance(mentions, list):
-                                all_mentions.extend(mentions)
-                            elif isinstance(mentions, np.ndarray):
-                                if mentions.size == 1:
-                                    # Single item array - extract and use if it's a list
-                                    item = mentions.item()
-                                    if isinstance(item, list):
-                                        all_mentions.extend(item)
-                                    else:
-                                        # If a single non-list item, add directly
-                                        all_mentions.append(item)
-                                elif mentions.size > 1:
-                                    # Multi-item array - convert to list
-                                    all_mentions.extend(mentions.tolist())
-                    except Exception as e:
-                        print(f"Error processing mentions for post {idx}: {str(e)}")
-                        traceback.print_exc()
+                    # Download and set profile image
+                    influencers[username]['profile_pic_local'] = self.download_profile_image(
+                        username, 
+                        influencers[username]['profile_pic_url']
+                    )
+            
+            # Process posts if we have merged data
+            if self.merged_data is not None:
+                print(f"Processing {len(self.merged_data)} posts")
+                
+                # Group data by username
+                grouped_data = self.merged_data.groupby('username')
+                print(f"Found {len(grouped_data)} influencer groups")
+                
+                # Process each influencer group
+                for username, group in grouped_data:
+                    print(f"Processing posts for: {username}")
                     
-                    # Calculate engagement rate
-                    try:
-                        # Get the basic values
-                        likes_count = post.get('likesCount', 0)
-                        comments_count = post.get('commentsCount', 0)
-                        followers_count = influencer['followers_count']
-                        timestamp = post.get('timestamp', None)
-                        
-                        # Ensure values are numeric and convert if needed
-                        if hasattr(likes_count, 'item'):
-                            likes_count = likes_count.item()
-                        if hasattr(comments_count, 'item'):
-                            comments_count = comments_count.item()
-                        
-                        # Convert to float for calculation
-                        likes_count = float(likes_count) if isinstance(likes_count, (int, float, np.number)) else 0
-                        comments_count = float(comments_count) if isinstance(comments_count, (int, float, np.number)) else 0
-                        followers_count = float(followers_count)
-                        
-                        # Only add to engagement data if we have all necessary values and followers > 0
-                        if followers_count > 0 and pd.notna(timestamp):
-                            # Calculate engagement rate as (likes + comments) / followers * 100
-                            engagement_rate = (likes_count + comments_count) / followers_count * 100
-                            
-                            # Convert timestamp to datetime object if it's not already
-                            if isinstance(timestamp, (int, float)):
-                                post_date = datetime.datetime.fromtimestamp(timestamp)
-                            elif isinstance(timestamp, str):
-                                post_date = pd.to_datetime(timestamp)
-                            else:
-                                post_date = pd.to_datetime(timestamp)
-                            
-                            engagement_data.append({
-                                'date': post_date,
-                                'engagement_rate': engagement_rate,
-                                'likes': likes_count,
-                                'comments': comments_count
-                            })
-                    except Exception as e:
-                        print(f"Error in engagement calculation for post {idx}: {str(e)}")
-                        traceback.print_exc()
+                    # Skip if this influencer doesn't exist in our dictionary (shouldn't happen typically)
+                    if username not in influencers:
+                        print(f"Warning: Found posts for {username} but no profile data")
+                        continue
                     
-                    try:
-                        # Get a sample of posts with images
-                        if pd.notna(post.get('displayUrl')):
-                            # Convert numerical values to Python native types to prevent serialization issues
-                            likes_count = post.get('likesCount', 0)
-                            if hasattr(likes_count, 'item'):
-                                # Handle multi-element arrays
-                                if isinstance(likes_count, np.ndarray) and likes_count.size > 1:
-                                    likes_count = float(np.mean(likes_count))
-                                else:
-                                    likes_count = likes_count.item()
-                                
-                            comments_count = post.get('commentsCount', 0)
-                            if hasattr(comments_count, 'item'):
-                                # Handle multi-element arrays
-                                if isinstance(comments_count, np.ndarray) and comments_count.size > 1:
-                                    comments_count = float(np.mean(comments_count))
-                                else:
-                                    comments_count = comments_count.item()
-                            
-                            # Ensure values are scalar
-                            likes_count = float(likes_count) if isinstance(likes_count, (int, float, np.number)) else 0
-                            comments_count = float(comments_count) if isinstance(comments_count, (int, float, np.number)) else 0
-                            
-                            # Only download the first 5 post images to conserve resources
-                            if len(posts) < 5:
-                                # Get post ID safely
-                                post_id = post.get('id', f"{username}_{idx}")
-                                # Download the post image
-                                post_image_local = self.download_post_image(post_id, post.get('displayUrl'))
-                            else:
-                                post_image_local = None
-                            
-                            posts.append({
-                                'id': post.get('id', ''),
-                                'shortCode': post.get('shortCode', ''),
-                                'caption': post.get('caption', ''),
-                                'likes_count': likes_count,
-                                'comments_count': comments_count,
-                                'display_url': post.get('displayUrl', ''),
-                                'display_url_local': post_image_local,
-                                'timestamp': post.get('timestamp', ''),
-                            })
-                    except Exception as e:
-                        print(f"Error processing post display for post {idx}: {str(e)}")
-                        traceback.print_exc()
-                
-                # Store all processed data
-                influencer['posts'] = posts[:5]  # Only store 5 sample posts
-                influencer['all_captions'] = ' '.join(all_captions)
-                
-                # Hashtag analysis
-                hashtag_counts = Counter(all_hashtags)
-                influencer['top_hashtags'] = dict(hashtag_counts.most_common(10))
-                influencer['hashtags_wordcloud'] = self._generate_wordcloud(hashtag_counts) if hashtag_counts else None
-                
-                # Mentions analysis
-                mention_counts = Counter(all_mentions)
-                influencer['top_mentions'] = dict(mention_counts.most_common(10))
-                
-                # Engagement analysis
-                try:
-                    if engagement_data:
-                        print(f"Processing engagement data for {username}: {len(engagement_data)} data points")
-                        # Convert to DataFrame for easier manipulation
-                        engagement_df = pd.DataFrame(engagement_data)
-                        print(f"Engagement DataFrame columns: {engagement_df.columns.tolist()}")
+                    influencer = influencers[username]
+                    
+                    # Track existing post IDs to avoid duplicates
+                    existing_post_ids = set()
+                    if 'posts' in influencer:
+                        existing_post_ids = {post.get('id') for post in influencer['posts'] if 'id' in post}
+                    
+                    # Get additional influencer data from posts
+                    # Add user data if it's missing from profile
+                    if 'full_name' not in influencer or not influencer['full_name']:
+                        influencer['full_name'] = group['ownerFullName'].iloc[0] if not pd.isna(group['ownerFullName'].iloc[0]) else username
                         
-                        # Ensure date column is datetime type and sort
-                        engagement_df['date'] = pd.to_datetime(engagement_df['date'])
-                        engagement_df = engagement_df.sort_values('date')
+                    # Add country if not set yet
+                    if 'country' not in influencer or influencer['country'] == 'Unknown':
+                        influencer['country'] = self.countries.get(username, 'Unknown')
+                    
+                    # Process posts for this influencer
+                    posts_list = []
+                    post_dates = []
+                    engagement_rates = []
+                    likes_counts = []
+                    comments_counts = []
+                    hashtags = []
+                    captions = []
+                    
+                    # Keep existing posts in the list
+                    if 'posts' in influencer:
+                        posts_list = influencer['posts']
+                    
+                    # Process each post for this influencer
+                    for _, post in group.iterrows():
+                        post_id = post['id']
                         
-                        # Create a formatted version of the dates for display
-                        engagement_df['date_str'] = engagement_df['date'].dt.strftime('%Y-%m-%d')
+                        # Skip if we already have this post
+                        if post_id in existing_post_ids:
+                            print(f"Skipping already processed post {post_id}")
+                            continue
                         
-                        # Handle NaN values in numeric columns
-                        engagement_df['engagement_rate'] = engagement_df['engagement_rate'].fillna(0)
-                        engagement_df['likes'] = engagement_df['likes'].fillna(0)
-                        engagement_df['comments'] = engagement_df['comments'].fillna(0)
+                        # Process post
+                        print(f"Processing post: {post_id}")
                         
-                        # Basic daily engagement (post by post)
-                        influencer['post_engagement'] = {
-                            'dates': engagement_df['date_str'].tolist(),
-                            'rates': engagement_df['engagement_rate'].tolist(),
-                            'engagement_rate': engagement_df['engagement_rate'].tolist(),  # Add for frontend compatibility
-                            'likes': engagement_df['likes'].tolist(),
-                            'comments': engagement_df['comments'].tolist()
+                        # Create post object
+                        post_obj = {
+                            'id': post_id,
+                            'shortcode': post.get('shortCode', ''),
+                            'caption': post.get('caption', ''),
+                            'likes_count': post.get('likesCount', 0),
+                            'comments_count': post.get('commentsCount', 0),
+                            'timestamp': post.get('timestamp', ''),
+                            'display_url': post.get('displayUrl', ''),
+                            'is_video': post.get('isVideo', False),
                         }
                         
-                        # Weekly engagement
-                        if len(engagement_df) > 1:  # Only aggregate if we have more than one data point
-                            # Set up numeric-only DataFrame for resampling
-                            numeric_df = engagement_df.set_index('date')
-                            numeric_cols = ['engagement_rate', 'likes', 'comments']
-                            
-                            # Weekly - keep only numeric columns for resampling
-                            weekly_data = numeric_df[numeric_cols].resample('W').mean()
-                            weekly_data.reset_index(inplace=True)
-                            weekly_data['date_str'] = weekly_data['date'].dt.strftime('%Y-%m-%d')
-                            
-                            # Handle NaN values in resampled data
-                            weekly_data = weekly_data.fillna(0)
-                            
-                            influencer['weekly_engagement'] = {
-                                'dates': weekly_data['date_str'].tolist(),
-                                'rates': weekly_data['engagement_rate'].tolist(),
-                                'engagement_rate': weekly_data['engagement_rate'].tolist(),  # Add for frontend compatibility
-                                'likes': weekly_data['likes'].tolist(),
-                                'comments': weekly_data['comments'].tolist()
-                            }
-                            
-                            # Monthly engagement
-                            monthly_data = numeric_df[numeric_cols].resample('M').mean()
-                            monthly_data.reset_index(inplace=True)
-                            monthly_data['date_str'] = monthly_data['date'].dt.strftime('%Y-%m-%d')
-                            
-                            # Handle NaN values in monthly data
-                            monthly_data = monthly_data.fillna(0)
-                            
-                            influencer['monthly_engagement'] = {
-                                'dates': monthly_data['date_str'].tolist(),
-                                'rates': monthly_data['engagement_rate'].tolist(),
-                                'engagement_rate': monthly_data['engagement_rate'].tolist(),  # Add for frontend compatibility
-                                'likes': monthly_data['likes'].tolist(),
-                                'comments': monthly_data['comments'].tolist()
-                            }
-                            
-                            # Quarterly engagement
-                            quarterly_data = numeric_df[numeric_cols].resample('Q').mean()
-                            quarterly_data.reset_index(inplace=True)
-                            quarterly_data['date_str'] = quarterly_data['date'].dt.strftime('%Y-%m-%d')
-                            
-                            # Handle NaN values in quarterly data
-                            quarterly_data = quarterly_data.fillna(0)
-                            
-                            influencer['quarterly_engagement'] = {
-                                'dates': quarterly_data['date_str'].tolist(),
-                                'rates': quarterly_data['engagement_rate'].tolist(),
-                                'engagement_rate': quarterly_data['engagement_rate'].tolist(),  # Add for frontend compatibility
-                                'likes': quarterly_data['likes'].tolist(),
-                                'comments': quarterly_data['comments'].tolist()
-                            }
-                        else:
-                            # If there's just one post, use the same data for all timeframes
-                            influencer['weekly_engagement'] = influencer['post_engagement']
-                            influencer['monthly_engagement'] = influencer['post_engagement']
-                            influencer['quarterly_engagement'] = influencer['post_engagement']
+                        # Download post image if available
+                        if not pd.isna(post.get('displayUrl')):
+                            post_obj['image_local'] = self.download_post_image(post_id, post['displayUrl'])
                         
-                        # Overall engagement stats
-                        influencer['avg_engagement_rate'] = float(engagement_df['engagement_rate'].mean())
-                        influencer['max_engagement_rate'] = float(engagement_df['engagement_rate'].max())
-                        influencer['avg_likes'] = float(engagement_df['likes'].mean())
-                        influencer['avg_comments'] = float(engagement_df['comments'].mean())
-                except Exception as e:
-                    print(f"Error in engagement analysis for {username}: {str(e)}")
-                    traceback.print_exc()
-                    # Set fallback values in case of error
-                    influencer['post_engagement'] = {'dates': [], 'rates': [], 'engagement_rate': [], 'likes': [], 'comments': []}
-                    influencer['weekly_engagement'] = {'dates': [], 'rates': [], 'engagement_rate': [], 'likes': [], 'comments': []}
-                    influencer['monthly_engagement'] = {'dates': [], 'rates': [], 'engagement_rate': [], 'likes': [], 'comments': []}
-                    influencer['quarterly_engagement'] = {'dates': [], 'rates': [], 'engagement_rate': [], 'likes': [], 'comments': []}
-                
-                influencers[username] = influencer
-                print(f"Completed processing for {username}")
+                        # Add post metrics to running totals
+                        if not pd.isna(post.get('timestamp')):
+                            post_dates.append(post['timestamp'])
+                            
+                        if not pd.isna(post.get('likesCount')) and not pd.isna(post.get('commentsCount')):
+                            likes = post['likesCount']
+                            comments = post['commentsCount']
+                            likes_counts.append(likes)
+                            comments_counts.append(comments)
+                            
+                            # Calculate engagement rate for this post
+                            if 'followers_count' in influencer and influencer['followers_count'] > 0:
+                                engagement = ((likes + comments) / influencer['followers_count']) * 100
+                                post_obj['engagement_rate'] = engagement
+                                engagement_rates.append(engagement)
+                            
+                        # Extract hashtags from caption
+                        if not pd.isna(post.get('caption')):
+                            caption = post['caption']
+                            captions.append(caption)
+                            
+                            import re
+                            tags = re.findall(r'#(\w+)', caption)
+                            hashtags.extend(tags)
+                            post_obj['hashtags'] = tags
+                        
+                        # Add post to the list
+                        posts_list.append(post_obj)
+                    
+                    # Add posts list to influencer
+                    influencer['posts'] = posts_list
             
+            self.influencers_data = influencers
+            print(f"Processed {len(influencers)} influencers successfully")
+
+            # Save the processed data
+            self._save_persistent_data()
+
+            return influencers
+        
         except Exception as e:
             print(f"Error in process_influencer_data: {str(e)}")
             traceback.print_exc()
             raise Exception(f"Error processing data: {str(e)}")
-        
-        self.influencers_data = influencers
-        print(f"Processed {len(influencers)} influencers successfully")
-
-        # Save the processed data
-        self._save_persistent_data()
-
-        return influencers
     
     def analyze_with_llm(self, openai_api_key):
         """Analyze influencer content using OpenAI LLM"""

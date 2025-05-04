@@ -355,7 +355,8 @@ def dashboard():
     # Get processed data from the user's data processor
     influencers_data = data_processor.influencers_data
     
-    return render_template('dashboard.html', influencers=influencers_data)
+    # Add a reset button to the template context
+    return render_template('dashboard.html', influencers=influencers_data, show_reset=True)
 
 @main_bp.route('/influencer/<username>')
 @login_required
@@ -865,4 +866,25 @@ def clear_data():
     except Exception as e:
         print(f"Error clearing data: {e}")
         flash('An error occurred while clearing data.', 'danger')
-        return jsonify({'success': False}), 500 
+        return jsonify({'success': False}), 500
+
+@main_bp.route('/reset-dashboard', methods=['POST'])
+@login_required
+def reset_dashboard():
+    try:
+        data_processor = get_data_processor()
+        # Always clear images when this endpoint is called
+        clear_images = True
+
+        # Use the clear_all_data method from DataProcessor
+        data_processor.clear_all_data(clear_images=clear_images)
+
+        # Reset the analysis complete flag
+        set_analysis_complete(False)
+
+        flash('All application data and images have been cleared.', 'success')
+        return redirect(url_for('main.dashboard'))
+    except Exception as e:
+        print(f"Error clearing data: {e}")
+        flash('An error occurred while clearing data.', 'danger')
+        return redirect(url_for('main.dashboard')) 

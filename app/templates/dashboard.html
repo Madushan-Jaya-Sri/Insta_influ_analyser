@@ -7,6 +7,40 @@
     <div class="hero-section text-center">
         <h1><i class="fas fa-chart-line me-2"></i>Influencer Analysis Dashboard</h1>
         <p class="lead">Analyzing {{ influencers|length }} influencers across {{ influencers.values()|map(attribute='country')|unique|list|length }} countries</p>
+        
+        {% if show_reset %}
+        <div class="mb-4 mt-2">
+            <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#resetModal">
+                <i class="fas fa-trash-alt me-2"></i>Reset Dashboard
+            </button>
+            
+            <a href="{{ url_for('main.index') }}" class="btn btn-primary ms-2">
+                <i class="fas fa-plus me-2"></i>Add Another Profile
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Modal for Reset Confirmation -->
+    <div class="modal fade" id="resetModal" tabindex="-1" aria-labelledby="resetModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="resetModalLabel">Confirm Reset</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to reset your dashboard?</p>
+                    <p class="text-danger">This will remove all analyzed profiles and cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form action="{{ url_for('main.reset_dashboard') }}" method="post">
+                        <button type="submit" class="btn btn-danger">Reset Dashboard</button>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Country filter -->
