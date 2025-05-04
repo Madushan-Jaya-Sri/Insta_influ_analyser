@@ -20,6 +20,7 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for('main.index')) # Redirect to main index or dashboard
     
+    
     form = LoginForm()
     if form.validate_on_submit():
         # Use SQLAlchemy query to find the user
