@@ -23,6 +23,10 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     
+    # Register context processors
+    from app.routes.main import inject_processing_status
+    app.context_processor(inject_processing_status)
+    
     # Register template filters
     @app.template_filter('format_number')
     def format_number(value):

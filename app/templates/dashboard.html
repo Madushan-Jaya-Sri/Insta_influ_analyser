@@ -7,18 +7,39 @@
     <div class="hero-section text-center">
         <h1><i class="fas fa-chart-line me-2"></i>Influencer Analysis Dashboard</h1>
         <p class="lead">Analyzing {{ influencers|length }} influencers across {{ influencers.values()|map(attribute='country')|unique|list|length }} countries</p>
-        
-        {% if show_reset %}
-        <div class="mb-4 mt-2">
-            <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#resetModal">
-                <i class="fas fa-trash-alt me-2"></i>Reset Dashboard
-            </button>
-            
-            <a href="{{ url_for('main.index') }}" class="btn btn-primary ms-2">
-                <i class="fas fa-plus me-2"></i>Add Another Profile
-            </a>
+    </div>
+
+    <!-- Action buttons & Country filter -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title mb-0"><i class="fas fa-filter me-2"></i>Dashboard Controls</h5>
+                        <div class="dashboard-actions">
+                            <a href="{{ url_for('main.index') }}" class="btn btn-primary">
+                                <i class="fas fa-plus me-2"></i>Add Profile
+                            </a>
+                            {% if show_reset %}
+                            <button class="btn btn-outline-danger ms-2" data-bs-toggle="modal" data-bs-target="#resetModal">
+                                <i class="fas fa-trash-alt me-2"></i>Reset Dashboard
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <h6 class="mb-2"><i class="fas fa-globe me-2"></i>Filter by Country</h6>
+                    <div class="d-flex flex-wrap">
+                        <button class="btn btn-outline-primary me-2 mb-2 filter-btn active" data-filter="all">All Countries</button>
+                        {% for country in influencers.values()|map(attribute='country')|unique|sort %}
+                            <button class="btn btn-outline-primary me-2 mb-2 filter-btn" data-filter="{{ country }}">{{ country }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
         </div>
-        {% endif %}
     </div>
 
     <!-- Modal for Reset Confirmation -->
@@ -30,31 +51,20 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p>Are you sure you want to reset your dashboard?</p>
-                    <p class="text-danger">This will remove all analyzed profiles and cannot be undone.</p>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Warning:</strong> You are about to reset your dashboard.
+                    </div>
+                    <p>This will remove <strong>all {{ influencers|length }} analyzed profiles</strong> and cannot be undone.</p>
+                    <p>Are you sure you want to proceed?</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <form action="{{ url_for('main.reset_dashboard') }}" method="post">
-                        <button type="submit" class="btn btn-danger">Reset Dashboard</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash-alt me-2"></i>Reset Dashboard
+                        </button>
                     </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Country filter -->
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title mb-3"><i class="fas fa-globe me-2"></i>Filter by Country</h5>
-                    <div class="d-flex flex-wrap">
-                        <button class="btn btn-outline-primary me-2 mb-2 filter-btn active" data-filter="all">All Countries</button>
-                        {% for country in influencers.values()|map(attribute='country')|unique|sort %}
-                            <button class="btn btn-outline-primary me-2 mb-2 filter-btn" data-filter="{{ country }}">{{ country }}</button>
-                        {% endfor %}
-                    </div>
                 </div>
             </div>
         </div>

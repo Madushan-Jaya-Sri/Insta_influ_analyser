@@ -38,6 +38,9 @@ processing_locks = {}
 # Global variables to store data paths for background processing - maps user IDs to their data
 background_data_by_user = {}
 
+# Add this near the top with other global variables
+processing_status_by_user = {}  # Maps user_id to processing status info
+
 # Helper function to get the data processor for the current user
 def get_data_processor():
     """Get the DataProcessor instance for the current user or create one if it doesn't exist"""
@@ -173,6 +176,48 @@ def update_progress(step, progress, status=None, message=None, complete=False):
         print(f"User ID: {user_id}")
         traceback.print_exc()
 
+# Helper function to get/set processing status
+def get_processing_status():
+    """Get the current processing status for the current user"""
+    if not current_user.is_authenticated:
+        return None
+        
+    user_id = current_user.id
+    if user_id not in processing_status_by_user:
+        return None
+        
+    return processing_status_by_user[user_id]
+
+def set_processing_status(status, message=None, urls=None, redirect_url=None):
+    """Set the processing status for the current user"""
+    if not current_user.is_authenticated:
+        return
+        
+    user_id = current_user.id
+    processing_status_by_user[user_id] = {
+        'status': status,  # 'processing', 'complete', 'error'
+        'message': message,
+        'timestamp': datetime.datetime.now().isoformat(),
+        'urls': urls,
+        'redirect_url': redirect_url
+    }
+
+def clear_processing_status():
+    """Clear the processing status for the current user"""
+    if not current_user.is_authenticated:
+        return
+        
+    user_id = current_user.id
+    if user_id in processing_status_by_user:
+        del processing_status_by_user[user_id]
+
+# Decorator to inject processing status into templates
+def inject_processing_status():
+    """Inject processing status into all templates"""
+    status = get_processing_status()
+    return dict(processing_status=status)
+
+# Modify the index route to handle form submission and allow navigation
 @main_bp.route('/', methods=['GET', 'POST'])
 def index():
     """Landing page with URL input form for authenticated users or marketing content for guests"""
@@ -182,6 +227,9 @@ def index():
     
     # For authenticated users, show the form for URL submission
     form = URLForm()
+    
+    # Get current processing status
+    processing_status = get_processing_status()
     
     if form.validate_on_submit():
         # Get Instagram URLs
@@ -198,15 +246,23 @@ def index():
         update_progress(1, 0, {}, 'Initializing data processing...', False)
         set_analysis_complete(False)
         
+        # Set processing status
+        set_processing_status('processing', 
+                             f'Processing {len(instagram_urls)} Instagram profiles...', 
+                             instagram_urls,
+                             redirect_url=url_for('main.dashboard'))
+        
         # Start processing in a separate thread
         background_task = copy_current_request_context(lambda: process_urls_in_background(instagram_urls, max_posts, time_filter))
         processing_thread = threading.Thread(target=background_task)
         processing_thread.daemon = True
         processing_thread.start()
         
+        # Redirect to processing page
+        flash('Analysis started! You can navigate to other pages while processing continues.', 'info')
         return redirect(url_for('main.processing'))
     
-    return render_template('index.html', form=form, show_form=True)
+    return render_template('index.html', form=form, show_form=True, processing_status=processing_status)
 
 @main_bp.route('/upload', methods=['GET', 'POST'])
 @login_required
@@ -354,6 +410,11 @@ def dashboard():
     
     # Get processed data from the user's data processor
     influencers_data = data_processor.influencers_data
+    
+    # Clear completed processing status when user views dashboard
+    processing_status = get_processing_status()
+    if processing_status and processing_status['status'] == 'complete':
+        clear_processing_status()
     
     # Add a reset button to the template context
     return render_template('dashboard.html', influencers=influencers_data, show_reset=True)
@@ -505,9 +566,13 @@ def view_historical_analysis(history_id):
 @main_bp.route('/processing')
 @login_required
 def processing():
-    if 'instagram_urls' not in session:
-        flash('Please enter Instagram profile URLs first.', 'warning')
-        return redirect(url_for('main.index'))
+    """Show processing page - can be accessed at any time during processing"""
+    # Check if there's an active processing task
+    processing_status = get_processing_status()
+    if not processing_status or processing_status['status'] != 'processing':
+        # No active processing or it's complete
+        flash('No active processing found.', 'info')
+        return redirect(url_for('main.dashboard'))
     
     return render_template('processing.html')
 
@@ -644,12 +709,15 @@ def process_data_in_background(profile_path, posts_path, country_mapping):
 # New function to process Instagram URLs
 def process_urls_in_background(instagram_urls, max_posts, time_filter):
     try:
+        # Update processing status
+        set_processing_status('processing', f'Processing {len(instagram_urls)} Instagram profiles...', instagram_urls)
+        
         # Get the data processor for the current user
         data_processor = get_data_processor()
         set_analysis_complete(False)  # Reset flag
 
         # Initial progress - Step 1: Initialization (0-15%)
-        update_progress(1, 0, {'init': 'working'}, 'Initializing Instagram analysis...')
+        update_progress(1, 0, {'init': 'working'}, 'Initializing Instagram analysis...', False)
         time.sleep(0.5)  # Small delay for visual effect
         
         update_progress(1, 5, {'init': 'working', 'apify': 'working'}, 'Connecting to data services...')
@@ -834,10 +902,13 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
         # Save to history database for later retrieval
         data_processor.save_to_history_db(time_filter=time_filter, max_posts=max_posts)
         
-        update_progress(4, 100, {'finalizing': 'complete'}, 'Processing complete! Redirecting to dashboard...', True)
+        # Set processing complete status
+        set_processing_status('complete', 'Analysis complete! View results on dashboard.', 
+                             instagram_urls, redirect_url=url_for('main.dashboard'))
         
     except Exception as e:
         print(f"Error in background processing: {str(e)}")
+        # Update progress and set error status
         update_progress(
             max(get_progress_data()['step'], 1),  # Keep current step
             get_progress_data()['progress'],  # Keep current progress
@@ -845,6 +916,7 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
             f"Error during processing: {str(e)}",
             False
         )
+        set_processing_status('error', f'Error during processing: {str(e)}', instagram_urls)
 
 @main_bp.route('/clear-data', methods=['POST'])
 @login_required
@@ -887,4 +959,14 @@ def reset_dashboard():
     except Exception as e:
         print(f"Error clearing data: {e}")
         flash('An error occurred while clearing data.', 'danger')
-        return redirect(url_for('main.dashboard')) 
+        return redirect(url_for('main.dashboard'))
+
+# Add a status check endpoint for AJAX polling
+@main_bp.route('/api/processing-status')
+@login_required
+def check_processing_status():
+    """API endpoint to check processing status"""
+    status = get_processing_status()
+    if status:
+        return jsonify(status)
+    return jsonify({'status': 'none'}) 
