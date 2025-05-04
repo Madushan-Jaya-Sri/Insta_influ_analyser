@@ -197,7 +197,7 @@ def set_processing_status(status, message=None, urls=None, redirect_url=None):
     processing_status_by_user[user_id] = {
         'status': status,  # 'processing', 'complete', 'error'
         'message': message,
-        'timestamp': datetime.datetime.now().isoformat(),
+        'timestamp': datetime.now().isoformat(),
         'urls': urls,
         'redirect_url': redirect_url
     }
