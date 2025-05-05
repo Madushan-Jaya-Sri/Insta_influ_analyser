@@ -9,11 +9,10 @@ from werkzeug.urls import url_parse
 from app.forms import LoginForm, RegistrationForm
 from app.models.user import User
 from app.models.history import History # Import History if needed here, or likely in main.py
-from run import db # Import db instance from run.py
+from app import db # Import db instance from app instead of run.py
 
-# Keep the blueprint name, but ensure url_prefix matches run.py if set there
-# The url_prefix='/auth' was added in run.py, so it's correct here.
-auth_bp = Blueprint('auth', __name__)
+# Import blueprint from minimal_auth to avoid circular imports
+from app.routes.minimal_auth import auth_bp
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():

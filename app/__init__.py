@@ -95,12 +95,18 @@ def create_app():
         if app.config['LOG_SESSIONS']:
             app.logger.debug("Session: %s, Cookies: %s", session, request.cookies)
     
-    # Register blueprints
-    from app.routes.main import main_bp
-    app.register_blueprint(main_bp)
+    # Register blueprints - move the imports inside the function to avoid circular imports
+    def register_blueprints(app):
+        # Import from minimal_main to avoid circular imports
+        from app.routes.minimal_main import main_bp
+        app.register_blueprint(main_bp)
     
-    from app.routes.auth import auth_bp
-    app.register_blueprint(auth_bp, url_prefix='/auth')
+        # Import from minimal_auth to avoid circular imports
+        from app.routes.minimal_auth import auth_bp
+        app.register_blueprint(auth_bp, url_prefix='/auth')
+    
+    # Call the blueprint registration function
+    register_blueprints(app)
     
     # Create database tables if they don't exist (for simple setup without full migrations initially)
     # Consider using Flask-Migrate commands for production/better management

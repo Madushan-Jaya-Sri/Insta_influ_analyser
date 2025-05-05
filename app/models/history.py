@@ -1,5 +1,5 @@
 import datetime
-from run import db # Import db from run.py
+from app import db # Import db from app instead of run.py
 from sqlalchemy.dialects.sqlite import JSON # Or postgresql.JSON if using PostgreSQL
 
 class History(db.Model):

@@ -20,9 +20,10 @@ from app.models.forms import URLForm, CountryForm, UploadForm
 from app.models.data_processor import DataProcessor
 from app.models.apify_client_wrapper import ApifyWrapper
 from app.models.history import History
-from run import db
+from app import db
 
-main_bp = Blueprint('main', __name__)
+# Import blueprint from minimal_main to avoid circular imports
+from app.routes.minimal_main import main_bp
 
 # Global data processor dictionary - maps user IDs to their DataProcessor instances
 data_processors = {}
