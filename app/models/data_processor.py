@@ -34,25 +34,88 @@ class DataProcessor:
         self.data_dir = data_dir
         self.user_id = user_id
         
+        # Debug info for deployment
+        print(f"\n== DataProcessor Initialization ==")
+        print(f"APP_ROOT: {APP_ROOT}")
+        print(f"DEFAULT_DATA_DIR: {DEFAULT_DATA_DIR}")
+        print(f"DEFAULT_IMAGES_PATH: {DEFAULT_IMAGES_PATH}")
+        print(f"User ID: {user_id}")
+        
         # Create user-specific data directory if a user_id is provided
         if user_id:
             self.user_data_dir = os.path.join(self.data_dir, f'user_{user_id}')
-            os.makedirs(self.user_data_dir, exist_ok=True)
+            try:
+                os.makedirs(self.user_data_dir, exist_ok=True)
+                print(f"Created/verified user data directory: {self.user_data_dir}")
+            except Exception as e:
+                print(f"ERROR creating user data directory {self.user_data_dir}: {str(e)}")
+                traceback.print_exc()
+                # Fall back to default directory
+                self.user_data_dir = self.data_dir
+                print(f"Using fallback directory: {self.user_data_dir}")
+                
             self.data_file_path = os.path.join(self.user_data_dir, 'influencers.json')
             
             # Create user-specific image directory
             self.user_images_dir = os.path.join(DEFAULT_IMAGES_PATH, f'user_{user_id}')
-            os.makedirs(os.path.join(self.user_images_dir, 'profiles'), exist_ok=True)
-            os.makedirs(os.path.join(self.user_images_dir, 'posts'), exist_ok=True)
-            os.makedirs(os.path.join(self.user_images_dir, 'misc'), exist_ok=True)
+            try:
+                os.makedirs(os.path.join(self.user_images_dir, 'profiles'), exist_ok=True)
+                os.makedirs(os.path.join(self.user_images_dir, 'posts'), exist_ok=True)
+                os.makedirs(os.path.join(self.user_images_dir, 'misc'), exist_ok=True)
+                print(f"Created/verified user image directories under: {self.user_images_dir}")
+            except Exception as e:
+                print(f"ERROR creating user image directories {self.user_images_dir}: {str(e)}")
+                traceback.print_exc()
+                # Fall back to default images directory
+                self.user_images_dir = DEFAULT_IMAGES_PATH
+                print(f"Using fallback image directory: {self.user_images_dir}")
         else:
             # Fallback to global data file for backward compatibility
             self.data_file_path = os.path.join(self.data_dir, 'influencers.json')
             self.user_data_dir = self.data_dir
             self.user_images_dir = DEFAULT_IMAGES_PATH
             
+        # Check directories are writable
+        self._check_directory_permissions()
         self._load_persistent_data()
         
+    def _check_directory_permissions(self):
+        """Verify directories have proper read/write permissions"""
+        try:
+            # Check user data directory
+            print(f"Checking permissions for {self.user_data_dir}")
+            if os.path.exists(self.user_data_dir):
+                if os.access(self.user_data_dir, os.W_OK):
+                    print(f"✓ User data directory is writable: {self.user_data_dir}")
+                else:
+                    print(f"✗ User data directory is NOT writable: {self.user_data_dir}")
+            else:
+                print(f"✗ User data directory does not exist: {self.user_data_dir}")
+                
+            # Check user images directory
+            print(f"Checking permissions for {self.user_images_dir}")
+            if os.path.exists(self.user_images_dir):
+                if os.access(self.user_images_dir, os.W_OK):
+                    print(f"✓ User images directory is writable: {self.user_images_dir}")
+                else:
+                    print(f"✗ User images directory is NOT writable: {self.user_images_dir}")
+            else:
+                print(f"✗ User images directory does not exist: {self.user_images_dir}")
+                
+            # Check if we can write a test file
+            test_file_path = os.path.join(self.user_data_dir, 'write_test.txt')
+            try:
+                with open(test_file_path, 'w') as f:
+                    f.write('write test')
+                os.remove(test_file_path)
+                print(f"✓ Successfully wrote and deleted test file in {self.user_data_dir}")
+            except Exception as e:
+                print(f"✗ Failed to write test file in {self.user_data_dir}: {str(e)}")
+                
+        except Exception as e:
+            print(f"Error checking directory permissions: {str(e)}")
+            traceback.print_exc()
+    
     def _get_runs_dir(self):
         """Get the directory for storing run history"""
         runs_dir = os.path.join(self.user_data_dir, 'runs')

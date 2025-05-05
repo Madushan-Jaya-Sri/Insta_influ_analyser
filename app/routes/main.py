@@ -137,6 +137,7 @@ def update_progress(step, progress, status=None, message=None, complete=False):
             return
     except Exception as e:
         print(f"Error getting user ID in update_progress: {str(e)}")
+        traceback.print_exc()
         return
     
     # Check if this is the final update and we're setting complete=True
@@ -153,6 +154,7 @@ def update_progress(step, progress, status=None, message=None, complete=False):
                 message = "Processing complete! Redirecting to dashboard..."
         except Exception as e:
             print(f"Error setting complete state: {str(e)}")
+            traceback.print_exc()
     
     try:
         # Ensure progress_data_by_user exists
@@ -160,14 +162,18 @@ def update_progress(step, progress, status=None, message=None, complete=False):
             global progress_data_by_user
             progress_data_by_user = {}
         
-        # Update progress data for this user
-        progress_data_by_user[user_id] = {
+        # Get a local copy of the progress data
+        progress_data = {
             'step': step,
             'progress': progress,
             'status': status or {},
             'message': message or 'Processing...',
-            'complete': complete
+            'complete': complete,
+            'timestamp': datetime.datetime.now().isoformat()
         }
+            
+        # Update progress data for this user in global dictionary
+        progress_data_by_user[user_id] = progress_data
         
         print(f"Progress updated: Step {step}, {progress}%, Message: {message}, Complete: {complete}")
     except Exception as e:
@@ -757,6 +763,38 @@ def process_data_in_background(profile_path, posts_path, country_mapping):
 # New function to process Instagram URLs
 def process_urls_in_background(instagram_urls, max_posts, time_filter):
     try:
+        # Deployment debugging logs
+        print("\n==== DEPLOYMENT DEBUG INFO ====")
+        print(f"Starting background processing at: {datetime.datetime.now().isoformat()}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"App root: {APP_ROOT}")
+        print(f"User ID: {current_user.id if current_user.is_authenticated else 'Not authenticated'}")
+        print(f"URLs to process: {instagram_urls}")
+        print(f"Max posts: {max_posts}")
+        print(f"Time filter: {time_filter}")
+        
+        # Check for required directories
+        user_id = current_user.id if current_user.is_authenticated else None
+        if user_id:
+            data_dir = os.path.join(current_app.config['DATA_FOLDER'], f'user_{user_id}')
+            images_dir = os.path.join(current_app.config['IMAGES_FOLDER'], f'user_{user_id}')
+            
+            print(f"Data directory: {data_dir} (exists: {os.path.exists(data_dir)})")
+            print(f"Images directory: {images_dir} (exists: {os.path.exists(images_dir)})")
+            
+            # Try to create directories if they don't exist
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir, exist_ok=True)
+                print(f"Created data directory: {data_dir}")
+            
+            if not os.path.exists(images_dir):
+                os.makedirs(images_dir, exist_ok=True)
+                print(f"Created images directory: {images_dir}")
+        
+        # Check OpenAI API key
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        print(f"OpenAI API key available: {'Yes' if openai_api_key else 'No'}")
+        
         # Update processing status
         set_processing_status('processing', f'Processing {len(instagram_urls)} Instagram profiles...', instagram_urls)
         
@@ -793,7 +831,6 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
             posts_newer_than = "1 year"
         
         # Get user-specific directory for downloads
-        user_id = current_user.id
         user_data_dir = os.path.join(current_app.config['DATA_FOLDER'], f'user_{user_id}')
         os.makedirs(user_data_dir, exist_ok=True)
         
@@ -928,7 +965,6 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
         time.sleep(0.5)
         
         # Content analysis with LLM
-        openai_api_key = os.getenv('OPENAI_API_KEY')
         if openai_api_key:
             try:
                 data_processor.analyze_with_llm(openai_api_key)
@@ -1017,4 +1053,52 @@ def check_processing_status():
     status = get_processing_status()
     if status:
         return jsonify(status)
-    return jsonify({'status': 'none'}) 
+    return jsonify({'status': 'none'})
+
+# New debug endpoint to view logs
+@main_bp.route('/debug/logs')
+@login_required
+def debug_logs():
+    """View application logs for debugging deployment issues"""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+        
+    # Only return logs for the current user
+    user_id = current_user.id
+    
+    # Return debugging information
+    debug_info = {
+        'current_time': datetime.datetime.now().isoformat(),
+        'progress_data': progress_data_by_user.get(user_id, {}),
+        'is_analysis_complete': analysis_complete_by_user.get(user_id, False),
+        'background_data': background_data_by_user.get(user_id, {}),
+        'processing_status': processing_status_by_user.get(user_id, {})
+    }
+    
+    # Include environment info
+    debug_info['environment'] = {
+        'app_root': os.path.abspath(os.path.dirname(os.path.dirname(__file__))),
+        'current_directory': os.getcwd(),
+        'data_folder': current_app.config.get('DATA_FOLDER', 'Not set'),
+        'images_folder': current_app.config.get('IMAGES_FOLDER', 'Not set'),
+        'openai_api_available': bool(os.getenv('OPENAI_API_KEY')),
+    }
+    
+    # Check important directories
+    data_dir = os.path.join(current_app.config.get('DATA_FOLDER', ''), f'user_{user_id}')
+    images_dir = os.path.join(current_app.config.get('IMAGES_FOLDER', ''), f'user_{user_id}')
+    
+    debug_info['directories'] = {
+        'data_dir': {
+            'path': data_dir,
+            'exists': os.path.exists(data_dir),
+            'is_writable': os.access(data_dir, os.W_OK) if os.path.exists(data_dir) else False
+        },
+        'images_dir': {
+            'path': images_dir,
+            'exists': os.path.exists(images_dir),
+            'is_writable': os.access(images_dir, os.W_OK) if os.path.exists(images_dir) else False
+        }
+    }
+    
+    return jsonify(debug_info) 
