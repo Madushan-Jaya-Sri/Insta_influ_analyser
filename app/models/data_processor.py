@@ -14,6 +14,7 @@ from collections import defaultdict, Counter
 import requests
 import shutil # Added for clear_data potential image deletion
 import uuid # For unique run IDs
+import re
 
 # Define the path for the data file relative to the script's location
 # This assumes run.py is in the root and calls create_app which sets up paths
@@ -403,8 +404,10 @@ class DataProcessor:
         # Create posts directory if it doesn't exist
         os.makedirs(save_dir, exist_ok=True)
         
-        # Use post ID as the filename
-        filename = f"{post_id}.jpg"
+        # Use post ID as the filename, but ensure it's a valid filename
+        # Replace any characters that might be invalid in a filename
+        safe_id = str(post_id).replace('/', '_').replace('\\', '_').replace(':', '_')
+        filename = f"{safe_id}.jpg"
         local_path = os.path.join(save_dir, filename)
         
         # Get the relative path for template usage
@@ -535,10 +538,9 @@ class DataProcessor:
                             existing['posts'] = []
                     
                     # Download and set profile image
-                    influencers[username]['profile_pic_local'] = self.download_profile_image(
-                        username, 
-                        influencers[username]['profile_pic_url']
-                    )
+                    profile_pic_url = influencers[username]['profile_pic_url']
+                    image_path = self.download_profile_image(username, profile_pic_url)
+                    influencers[username]['profile_pic_local'] = image_path
             
             # Process posts if we have merged data
             if self.merged_data is not None:
@@ -581,6 +583,8 @@ class DataProcessor:
                     comments_counts = []
                     hashtags = []
                     captions = []
+                    mentions = []
+                    all_captions_text = ""
                     
                     # Keep existing posts in the list
                     if 'posts' in influencer:
@@ -588,7 +592,14 @@ class DataProcessor:
                     
                     # Process each post for this influencer
                     for _, post in group.iterrows():
-                        post_id = post['id']
+                        # Safely get post ID or generate a fallback ID
+                        if 'id' in post:
+                            post_id = post['id']
+                        elif 'shortCode' in post:
+                            post_id = f"sc_{post['shortCode']}"
+                        else:
+                            # Generate a unique ID using hash of post content
+                            post_id = f"gen_{hash(str(post))}"
                         
                         # Skip if we already have this post
                         if post_id in existing_post_ids:
@@ -598,13 +609,17 @@ class DataProcessor:
                         # Process post
                         print(f"Processing post: {post_id}")
                         
+                        # Get likes and comments
+                        likes_count = post.get('likesCount', 0) if not pd.isna(post.get('likesCount')) else 0
+                        comments_count = post.get('commentsCount', 0) if not pd.isna(post.get('commentsCount')) else 0
+                        
                         # Create post object
                         post_obj = {
                             'id': post_id,
                             'shortcode': post.get('shortCode', ''),
                             'caption': post.get('caption', ''),
-                            'likes_count': post.get('likesCount', 0),
-                            'comments_count': post.get('commentsCount', 0),
+                            'likes_count': likes_count,
+                            'comments_count': comments_count,
                             'timestamp': post.get('timestamp', ''),
                             'display_url': post.get('displayUrl', ''),
                             'is_video': post.get('isVideo', False),
@@ -612,39 +627,223 @@ class DataProcessor:
                         
                         # Download post image if available
                         if not pd.isna(post.get('displayUrl')):
-                            post_obj['image_local'] = self.download_post_image(post_id, post['displayUrl'])
+                            image_path = self.download_post_image(post_id, post['displayUrl'])
+                            # Store the image path with consistent field name
+                            post_obj['image_local'] = image_path
                         
                         # Add post metrics to running totals
                         if not pd.isna(post.get('timestamp')):
                             post_dates.append(post['timestamp'])
                             
-                        if not pd.isna(post.get('likesCount')) and not pd.isna(post.get('commentsCount')):
-                            likes = post['likesCount']
-                            comments = post['commentsCount']
-                            likes_counts.append(likes)
-                            comments_counts.append(comments)
+                        # Add likes and comments to running totals
+                        likes_counts.append(likes_count)
+                        comments_counts.append(comments_count)
+                        
+                        # Calculate engagement rate for this post
+                        if 'followers_count' in influencer and influencer['followers_count'] > 0:
+                            engagement = ((likes_count + comments_count) / influencer['followers_count']) * 100
+                            post_obj['engagement_rate'] = engagement
+                            engagement_rates.append(engagement)
                             
-                            # Calculate engagement rate for this post
-                            if 'followers_count' in influencer and influencer['followers_count'] > 0:
-                                engagement = ((likes + comments) / influencer['followers_count']) * 100
-                                post_obj['engagement_rate'] = engagement
-                                engagement_rates.append(engagement)
-                            
-                        # Extract hashtags from caption
-                        if not pd.isna(post.get('caption')):
-                            caption = post['caption']
+                        # Extract caption for analysis
+                        caption = post.get('caption', '')
+                        if caption and not pd.isna(caption):
                             captions.append(caption)
-                            
+                            all_captions_text += caption + "\n\n"  # Add to full captions text
+                        
+                        # Extract hashtags from post data or caption
+                        post_hashtags = []
+                        if 'hashtags' in post:
+                            # Check if it's a numpy array and handle accordingly
+                            if isinstance(post['hashtags'], np.ndarray):
+                                if not pd.isna(post['hashtags']).all():  # Only process if not all values are NaN
+                                    post_hashtags = post['hashtags'].tolist()
+                            # If not an array, check if it's not NaN directly
+                            elif isinstance(post['hashtags'], list):
+                                post_hashtags = post['hashtags']
+                            elif isinstance(post['hashtags'], str) and not pd.isna(post['hashtags']):
+                                post_hashtags = post['hashtags'].split(',')
+                            # If it's scalar, check for NaN
+                            elif not pd.isna(post['hashtags']):
+                                # Try to convert to string and split
+                                try:
+                                    post_hashtags = str(post['hashtags']).split(',')
+                                except:
+                                    pass
+                        
+                        # If no hashtags found in the field, extract from caption
+                        if not post_hashtags and caption and not pd.isna(caption):
                             import re
-                            tags = re.findall(r'#(\w+)', caption)
-                            hashtags.extend(tags)
-                            post_obj['hashtags'] = tags
+                            post_hashtags = re.findall(r'#(\w+)', caption)
+                        
+                        # Clean and store hashtags
+                        if post_hashtags:
+                            post_obj['hashtags'] = post_hashtags
+                            hashtags.extend(post_hashtags)
+                        
+                        # Extract mentions from post data or caption
+                        post_mentions = []
+                        if 'mentions' in post:
+                            # Check if it's a numpy array and handle accordingly
+                            if isinstance(post['mentions'], np.ndarray):
+                                if not pd.isna(post['mentions']).all():  # Only process if not all values are NaN
+                                    post_mentions = post['mentions'].tolist()
+                            # If not an array, check if it's not NaN directly
+                            elif isinstance(post['mentions'], list):
+                                post_mentions = post['mentions']
+                            elif isinstance(post['mentions'], str) and not pd.isna(post['mentions']):
+                                post_mentions = post['mentions'].split(',')
+                            # If it's scalar, check for NaN
+                            elif not pd.isna(post['mentions']):
+                                # Try to convert to string and split
+                                try:
+                                    post_mentions = str(post['mentions']).split(',')
+                                except:
+                                    pass
+                        
+                        # If no mentions found in the field, extract from caption
+                        if not post_mentions and caption and not pd.isna(caption):
+                            import re
+                            post_mentions = re.findall(r'@(\w+)', caption)
+                        
+                        # Clean and store mentions
+                        if post_mentions:
+                            post_obj['mentions'] = post_mentions
+                            mentions.extend(post_mentions)
                         
                         # Add post to the list
                         posts_list.append(post_obj)
                     
                     # Add posts list to influencer
                     influencer['posts'] = posts_list
+                    
+                    # Calculate and add aggregate metrics
+                    # Total engagement metrics
+                    influencer['likes_total'] = sum(likes_counts) if likes_counts else 0
+                    influencer['comments_total'] = sum(comments_counts) if comments_counts else 0
+                    influencer['total_engagement'] = influencer['likes_total'] + influencer['comments_total']
+                    
+                    # Average engagement metrics
+                    influencer['avg_likes'] = np.mean(likes_counts) if likes_counts else 0
+                    influencer['avg_comments'] = np.mean(comments_counts) if comments_counts else 0
+                    
+                    # Engagement rates
+                    if influencer.get('followers_count', 0) > 0 and len(posts_list) > 0:
+                        # Overall engagement rate
+                        influencer['engagement_rate'] = (influencer['total_engagement'] / (influencer['followers_count'] * len(posts_list))) * 100
+                        
+                        # Average post engagement rate
+                        influencer['avg_engagement_rate'] = np.mean(engagement_rates) if engagement_rates else 0
+                        influencer['max_engagement_rate'] = max(engagement_rates) if engagement_rates else 0
+                    else:
+                        influencer['engagement_rate'] = 0
+                        influencer['avg_engagement_rate'] = 0
+                        influencer['max_engagement_rate'] = 0
+                    
+                    # Top hashtags (most frequent first)
+                    if hashtags:
+                        hashtag_counter = Counter(hashtags)
+                        influencer['top_hashtags'] = [{'tag': tag, 'count': count} for tag, count in hashtag_counter.most_common(10)]
+                    else:
+                        influencer['top_hashtags'] = []
+                    
+                    # Top mentions (most frequent first)
+                    if mentions:
+                        mention_counter = Counter(mentions)
+                        influencer['top_mentions'] = [{'username': username, 'count': count} for username, count in mention_counter.most_common(10)]
+                    else:
+                        influencer['top_mentions'] = []
+                    
+                    # Store all captions for LLM analysis
+                    influencer['all_captions'] = all_captions_text
+                    
+                    # Generate time-based engagement metrics if we have dates
+                    if post_dates and (likes_counts or comments_counts):
+                        try:
+                            # Convert timestamps to datetime objects
+                            date_objs = [pd.to_datetime(date) for date in post_dates if not pd.isna(date)]
+                            
+                            if date_objs:
+                                # Create a DataFrame for time-based analysis
+                                engagement_df = pd.DataFrame({
+                                    'date': date_objs,
+                                    'likes': likes_counts[:len(date_objs)],  # Align with valid dates
+                                    'comments': comments_counts[:len(date_objs)]  # Align with valid dates
+                                })
+                                
+                                # Sort by date
+                                engagement_df = engagement_df.sort_values('date')
+                                
+                                # Add total engagement column
+                                engagement_df['engagement'] = engagement_df['likes'] + engagement_df['comments']
+                                
+                                # Add engagement rate if we have follower count
+                                if influencer.get('followers_count', 0) > 0:
+                                    engagement_df['engagement_rate'] = (engagement_df['engagement'] / influencer['followers_count']) * 100
+                                
+                                # Weekly engagement aggregation
+                                weekly = engagement_df.groupby(pd.Grouper(key='date', freq='W')).agg({
+                                    'likes': 'sum',
+                                    'comments': 'sum',
+                                    'engagement': 'sum'
+                                }).reset_index()
+                                
+                                if not weekly.empty and influencer.get('followers_count', 0) > 0:
+                                    weekly['engagement_rate'] = (weekly['engagement'] / influencer['followers_count']) * 100
+                                
+                                # Monthly engagement aggregation
+                                monthly = engagement_df.groupby(pd.Grouper(key='date', freq='M')).agg({
+                                    'likes': 'sum',
+                                    'comments': 'sum',
+                                    'engagement': 'sum'
+                                }).reset_index()
+                                
+                                if not monthly.empty and influencer.get('followers_count', 0) > 0:
+                                    monthly['engagement_rate'] = (monthly['engagement'] / influencer['followers_count']) * 100
+                                
+                                # Quarterly engagement aggregation
+                                quarterly = engagement_df.groupby(pd.Grouper(key='date', freq='Q')).agg({
+                                    'likes': 'sum',
+                                    'comments': 'sum',
+                                    'engagement': 'sum'
+                                }).reset_index()
+                                
+                                if not quarterly.empty and influencer.get('followers_count', 0) > 0:
+                                    quarterly['engagement_rate'] = (quarterly['engagement'] / influencer['followers_count']) * 100
+                                
+                                # Convert to serializable format
+                                influencer['engagement_weekly'] = [
+                                    {
+                                        'date': row['date'].strftime('%Y-%m-%d'),
+                                        'likes': int(row['likes']),
+                                        'comments': int(row['comments']),
+                                        'engagement': int(row['engagement']),
+                                        'engagement_rate': float(row.get('engagement_rate', 0))
+                                    } for _, row in weekly.iterrows()
+                                ]
+                                
+                                influencer['engagement_monthly'] = [
+                                    {
+                                        'date': row['date'].strftime('%Y-%m'),
+                                        'likes': int(row['likes']),
+                                        'comments': int(row['comments']),
+                                        'engagement': int(row['engagement']),
+                                        'engagement_rate': float(row.get('engagement_rate', 0))
+                                    } for _, row in monthly.iterrows()
+                                ]
+                                
+                                influencer['engagement_quarterly'] = [
+                                    {
+                                        'date': row['date'].strftime('%Y-Q%q'),
+                                        'likes': int(row['likes']),
+                                        'comments': int(row['comments']),
+                                        'engagement': int(row['engagement']),
+                                        'engagement_rate': float(row.get('engagement_rate', 0))
+                                    } for _, row in quarterly.iterrows()
+                                ]
+                        except Exception as e:
+                            print(f"Error generating time-based metrics for {username}: {e}")
+                            traceback.print_exc()
             
             self.influencers_data = influencers
             print(f"Processed {len(influencers)} influencers successfully")
@@ -661,7 +860,7 @@ class DataProcessor:
     
     def analyze_with_llm(self, openai_api_key):
         """Analyze influencer content using OpenAI LLM"""
-        print("Starting LLM analysis")
+        print("\n========== STARTING LLM ANALYSIS ==========")
         
         # Try importing OpenAI and setting up client with proper method
         api_available = False
@@ -670,116 +869,334 @@ class DataProcessor:
             import openai
             openai.api_key = openai_api_key
             api_available = True
-            print("Successfully set OpenAI API key")
+            
+            # Check OpenAI API version to use correct API call format
+            import pkg_resources
+            openai_version = pkg_resources.get_distribution("openai").version
+            using_new_api = openai_version.startswith('1.')
+            print(f"✓ Successfully configured OpenAI API (version {openai_version})")
         except Exception as e:
-            print(f"Error importing OpenAI: {str(e)}")
+            print(f"✗ Error importing OpenAI: {str(e)}")
             traceback.print_exc()
             api_available = False
         
         for username, influencer in self.influencers_data.items():
-            print(f"Analyzing content for {username} with LLM")
-            if not influencer.get('all_captions'):
-                print(f"No captions found for {username}, skipping LLM analysis")
+            print(f"\n----- Analyzing content for {username} -----")
+            
+            # Get all relevant content for analysis
+            biography = influencer.get('biography', '')
+            business_category = influencer.get('business_category', '')
+            
+            # Get captions text
+            captions_text = influencer.get('all_captions', '')
+            if not captions_text and 'posts' in influencer:
+                # Build captions from posts if all_captions not set
+                captions_text = "\n\n".join([post.get('caption', '') for post in influencer['posts'] 
+                                          if post.get('caption') and not pd.isna(post.get('caption'))])
+            
+            # Get hashtags
+            hashtags = []
+            if 'top_hashtags' in influencer and influencer['top_hashtags']:
+                hashtags = [item['tag'] for item in influencer['top_hashtags']]
+            else:
+                # Extract from posts if not already aggregated
+                for post in influencer.get('posts', []):
+                    if 'hashtags' in post and isinstance(post['hashtags'], list):
+                        hashtags.extend(post['hashtags'])
+            
+            # Get mentions
+            mentions = []
+            if 'top_mentions' in influencer and influencer['top_mentions']:
+                mentions = [item['username'] for item in influencer['top_mentions']]
+            else:
+                # Extract from posts if not already aggregated
+                for post in influencer.get('posts', []):
+                    if 'mentions' in post and isinstance(post['mentions'], list):
+                        mentions.extend(post['mentions'])
+            
+            # Remove duplicates
+            hashtags = list(set(hashtags))
+            mentions = list(set(mentions))
+            
+            # Skip if we have no meaningful content to analyze
+            if not biography and not captions_text and not hashtags:
+                print(f"✗ No content found for {username}, skipping LLM analysis")
+                # Initialize with empty values
                 influencer['main_interests'] = []
                 influencer['related_interests'] = []
                 influencer['key_topics'] = []
                 influencer['affiliated_brands'] = []
+                influencer['content_sentiment'] = {
+                    'overall': 'Neutral',
+                    'description': 'Insufficient data for sentiment analysis'
+                }
                 continue
-            
-            text = influencer['all_captions']
-            biography = influencer.get('biography', '')
-            business_category = influencer.get('business_category', '')
             
             if api_available:
                 try:
-                    print(f"Sending request to OpenAI for {username}")
+                    print(f"→ Constructing prompt for {username}")
+                    
+                    # Prepare the prompt with all available information
                     prompt = f"""
-                    I need to analyze content from an Instagram influencer with:
-                    - Username: {username}
-                    - Biography: {biography}
-                    - Business Category: {business_category}
+                    I need an in-depth analysis of an Instagram influencer with the following data:
                     
-                    Based on the following content from their posts:
-                    {text[:3000]}
+                    USERNAME: {username}
                     
-                    Please identify:
-                    1) Main interests and related interests of this influencer
-                    2) Key topics they discuss or care about
-                    3) Brands or companies they appear to be affiliated with or mention frequently
+                    BIOGRAPHY: {biography}
                     
-                    Format your response as JSON with "main_interests", "related_interests", "key_topics", and "affiliated_brands" as lists.
+                    BUSINESS CATEGORY: {business_category}
+                    
+                    HASHTAGS USED: {', '.join(hashtags[:30]) if hashtags else 'No hashtags available'}
+                    
+                    ACCOUNTS MENTIONED: {', '.join(mentions[:20]) if mentions else 'No mentions available'}
+                    
+                    SAMPLE POST CAPTIONS:
+                    {captions_text[:1000] + '...' if len(captions_text) > 1000 else captions_text}
+                    
+                    Based on this information, please provide:
+                    
+                    1. Main interests/topics of this influencer (3-5 items)
+                    2. Related interests/topics that are secondary but still relevant (3-5 items)
+                    3. Key topics frequently discussed in their content (3-5 items)
+                    4. Identify any brands or companies they appear to be affiliated with from the mentions and captions
+                    5. A brief sentiment analysis of their content (positive, negative, neutral, aspirational, educational, etc.)
+                    
+                    Format your response as JSON with these keys:
+                    ```json
+                    {{
+                        "main_interests": ["interest1", "interest2", ...],
+                        "related_interests": ["interest1", "interest2", ...],
+                        "key_topics": ["topic1", "topic2", ...],
+                        "affiliated_brands": ["brand1", "brand2", ...],
+                        "content_sentiment": {{
+                            "overall": "Positive/Negative/Neutral/etc.",
+                            "description": "Brief 1-2 sentence description of content style and tone"
+                        }}
+                    }}
+                    ```
                     """
                     
-                    # Use the new ChatCompletion API
-                    response = openai.ChatCompletion.create(
-                        model="gpt-3.5-turbo",
-                        messages=[
-                            {"role": "system", "content": "You are a social media analyst specializing in influencer marketing."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=0.7,
-                        max_tokens=500
-                    )
+                    print(f"→ Sending request to OpenAI for {username}")
+                    print(f"  Input content summary: Biography ({len(biography)} chars), " +
+                          f"Hashtags ({len(hashtags)}), Mentions ({len(mentions)}), " +
+                          f"Captions ({len(captions_text)} chars)")
                     
-                    # Log the raw response for debugging
-                    print(f"Raw response for {username}: {response}")
+                    # Use the appropriate API call format based on OpenAI version
+                    if using_new_api:
+                        # New API format (v1.x)
+                        response = openai.chat.completions.create(
+                            model="gpt-3.5-turbo",
+                            messages=[
+                                {"role": "system", "content": "You are a social media analyst specializing in influencer marketing. Provide detailed analysis of Instagram content."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.7,
+                            max_tokens=800
+                        )
+                        
+                        # Extract content
+                        response_content = response.choices[0].message.content if response.choices else "No content"
+                    else:
+                        # Legacy API format (v0.x)
+                        response = openai.ChatCompletion.create(
+                            model="gpt-3.5-turbo",
+                            messages=[
+                                {"role": "system", "content": "You are a social media analyst specializing in influencer marketing. Provide detailed analysis of Instagram content."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.7,
+                            max_tokens=800
+                        )
+                        
+                        # Extract content
+                        response_content = response['choices'][0]['message']['content'] if response['choices'] else "No content"
+                    
+                    truncated_content = response_content[:1000] + "..." if len(response_content) > 1000 else response_content
+                    print(f"← Received response from OpenAI for {username}")
+                    print(f"  Response length: {len(response_content)} characters")
+                    print(f"  Response preview: {truncated_content[:200]}...")
                     
                     # Check if the response contains the expected content
-                    if 'choices' in response and response.choices:
+                    if (using_new_api and 'choices' in response and response.choices) or \
+                       (not using_new_api and 'choices' in response and response['choices']):
                         # Extract JSON content from within the backticks
-                        content = response.choices[0].message['content']
-                        json_content = content.strip('```json\n').strip('\n```')
-                        result = json.loads(json_content)
-                        print(f"Received response from OpenAI for {username}")
+                        content = response_content
+                        # Try to find JSON within backticks first
+                        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content, re.DOTALL)
                         
-                        influencer['main_interests'] = result.get('main_interests', [])
-                        influencer['related_interests'] = result.get('related_interests', [])
-                        influencer['key_topics'] = result.get('key_topics', [])
-                        influencer['affiliated_brands'] = result.get('affiliated_brands', [])
+                        if json_match:
+                            json_content = json_match.group(1)
+                        else:
+                            # If no backticks found, try to parse the whole content
+                            json_content = content
+                        
+                        try:
+                            result = json.loads(json_content)
+                            print(f"✓ Successfully parsed JSON response for {username}")
+                            
+                            # Apply the result to the influencer data
+                            influencer['main_interests'] = result.get('main_interests', [])
+                            influencer['related_interests'] = result.get('related_interests', [])
+                            influencer['key_topics'] = result.get('key_topics', [])
+                            influencer['affiliated_brands'] = result.get('affiliated_brands', [])
+                            
+                            # Add content sentiment analysis
+                            if 'content_sentiment' in result and isinstance(result['content_sentiment'], dict):
+                                influencer['content_sentiment'] = result['content_sentiment']
+                            else:
+                                influencer['content_sentiment'] = {
+                                    'overall': 'Neutral',
+                                    'description': 'Content appears to be neutral in tone.'
+                                }
+                            
+                            # Log the analysis results
+                            print(f"  Main interests: {influencer['main_interests']}")
+                            print(f"  Related interests: {influencer['related_interests']}")
+                            print(f"  Key topics: {influencer['key_topics']}")
+                            print(f"  Affiliated brands: {influencer['affiliated_brands']}")
+                            print(f"  Content sentiment: {influencer['content_sentiment']['overall']}")
+                            
+                        except json.JSONDecodeError as e:
+                            print(f"✗ Failed to parse JSON for {username}: {str(e)}")
+                            print(f"  Raw content: {json_content}")
+                            self._set_mock_analysis(influencer, captions_text, hashtags, mentions)
                     else:
-                        print(f"Unexpected response format for {username}: {response}")
-                        self._set_mock_analysis(influencer, text)
+                        print(f"✗ Unexpected response format for {username}")
+                        self._set_mock_analysis(influencer, captions_text, hashtags, mentions)
                 
                 except Exception as e:
-                    print(f"Error analyzing content for {username} with OpenAI: {str(e)}")
+                    print(f"✗ Error analyzing content for {username} with OpenAI: {str(e)}")
                     traceback.print_exc()
-                    self._set_mock_analysis(influencer, text)
+                    self._set_mock_analysis(influencer, captions_text, hashtags, mentions)
             else:
-                print(f"Using simple analysis for {username} (OpenAI API not available)")
-                self._set_mock_analysis(influencer, text)
+                print(f"→ Using simple analysis for {username} (OpenAI API not available)")
+                self._set_mock_analysis(influencer, captions_text, hashtags, mentions)
         
-        print("LLM analysis complete")
+        print("\n========== LLM ANALYSIS COMPLETE ==========\n")
         return self.influencers_data
     
-    def _set_mock_analysis(self, influencer, text):
+    def _set_mock_analysis(self, influencer, text, hashtags=None, mentions=None):
         """Set mock analysis data when OpenAI API is unavailable"""
         # Simple analysis based on basic keyword frequency
-        text_lower = text.lower()
+        text_lower = text.lower() if text else ""
+        hashtags = hashtags or []
+        mentions = mentions or []
         
         # Default interests
         influencer['main_interests'] = ["Social Media", "Photography"]
         influencer['related_interests'] = ["Travel", "Fashion"]
         influencer['key_topics'] = ["Lifestyle", "Content Creation"]
         influencer['affiliated_brands'] = []
+        influencer['content_sentiment'] = {
+            'overall': 'Neutral',
+            'description': 'Basic analysis indicates a balanced content style.'
+        }
         
-        # Basic keyword detection
-        if "travel" in text_lower or "trip" in text_lower or "vacation" in text_lower:
-            influencer['main_interests'].append("Travel")
-            influencer['key_topics'].append("Travel")
+        # Basic keyword detection for interests and topics
+        keywords = {
+            "Travel": ["travel", "trip", "vacation", "destination", "wanderlust", "explore"],
+            "Food": ["food", "recipe", "cooking", "eat", "restaurant", "meal", "delicious"],
+            "Fashion": ["fashion", "style", "outfit", "clothing", "wear", "dress"],
+            "Fitness": ["workout", "fitness", "exercise", "gym", "training", "health"],
+            "Beauty": ["makeup", "beauty", "skincare", "cosmetics", "hair", "skin"],
+            "Lifestyle": ["lifestyle", "life", "daily", "routine", "living"],
+            "Technology": ["tech", "technology", "digital", "gadget", "device"],
+            "Art": ["art", "artist", "creative", "design", "paint", "draw"],
+            "Music": ["music", "song", "artist", "concert", "festival"],
+            "Family": ["family", "kid", "child", "parent", "baby", "mom", "dad"]
+        }
+        
+        # Check text content against keywords
+        detected_interests = []
+        for category, terms in keywords.items():
+            for term in terms:
+                if term in text_lower:
+                    detected_interests.append(category)
+                    break
+        
+        # Check hashtags against keywords
+        for tag in hashtags:
+            tag_lower = tag.lower()
+            for category, terms in keywords.items():
+                category_lower = category.lower()
+                if tag_lower == category_lower or any(term in tag_lower for term in terms):
+                    detected_interests.append(category)
+                    break
+        
+        # Get unique interests
+        detected_interests = list(set(detected_interests))
+        
+        # Set detected interests if we found any
+        if detected_interests:
+            # Main interests are the first 3-5
+            influencer['main_interests'] = detected_interests[:min(5, len(detected_interests))]
             
-        if "food" in text_lower or "recipe" in text_lower or "delicious" in text_lower:
-            influencer['main_interests'].append("Food")
-            influencer['key_topics'].append("Culinary")
+            # Related interests are the rest, up to 5 more
+            if len(detected_interests) > 5:
+                influencer['related_interests'] = detected_interests[5:min(10, len(detected_interests))]
+            
+            # Key topics are a mix
+            influencer['key_topics'] = detected_interests[:min(5, len(detected_interests))]
         
-        if "fashion" in text_lower or "style" in text_lower or "outfit" in text_lower:
-            influencer['main_interests'].append("Fashion") 
-            influencer['key_topics'].append("Style")
+        # Try to detect brand mentions
+        common_brands = [
+            "nike", "adidas", "puma", "reebok", "underarmour", "newbalance",
+            "apple", "samsung", "huawei", "sony", "microsoft", "google",
+            "coca", "cola", "pepsi", "starbucks", "mcdonalds", "wendys",
+            "amazon", "walmart", "target", "ikea", "hm", "zara",
+            "sephora", "ulta", "maccosmetics", "fenty", "dove", "loreal"
+        ]
         
-        # Remove duplicates
-        influencer['main_interests'] = list(set(influencer['main_interests']))
-        influencer['related_interests'] = list(set(influencer['related_interests']))
-        influencer['key_topics'] = list(set(influencer['key_topics']))
-        influencer['affiliated_brands'] = list(set(influencer['affiliated_brands']))
+        # Check for brand mentions
+        detected_brands = []
+        
+        # Check in mentions
+        for mention in mentions:
+            mention_lower = mention.lower()
+            if any(brand in mention_lower for brand in common_brands):
+                detected_brands.append(mention)
+        
+        # Check in text
+        for brand in common_brands:
+            if brand in text_lower:
+                # Capitalize brand names
+                detected_brands.append(brand.title())
+        
+        if detected_brands:
+            influencer['affiliated_brands'] = list(set(detected_brands))[:10]
+        
+        # Determine sentiment based on keywords
+        positive_words = ["love", "great", "amazing", "beautiful", "happy", "best", "perfect", "awesome"]
+        negative_words = ["bad", "hate", "awful", "terrible", "worst", "sad", "disappointed"]
+        
+        positive_count = sum(1 for word in positive_words if word in text_lower)
+        negative_count = sum(1 for word in negative_words if word in text_lower)
+        
+        if positive_count > negative_count * 2:
+            influencer['content_sentiment'] = {
+                'overall': 'Very Positive',
+                'description': 'Content has an overwhelmingly positive and uplifting tone.'
+            }
+        elif positive_count > negative_count:
+            influencer['content_sentiment'] = {
+                'overall': 'Positive',
+                'description': 'Content generally has a positive tone.'
+            }
+        elif negative_count > positive_count * 2:
+            influencer['content_sentiment'] = {
+                'overall': 'Very Negative',
+                'description': 'Content has a predominantly negative tone.'
+            }
+        elif negative_count > positive_count:
+            influencer['content_sentiment'] = {
+                'overall': 'Somewhat Negative',
+                'description': 'Content has a slightly negative tone.'
+            }
+        else:
+            influencer['content_sentiment'] = {
+                'overall': 'Neutral',
+                'description': 'Content appears to be balanced or neutral in tone.'
+            }
     
     def _generate_wordcloud(self, word_counts):
         """Generate a word cloud image from word counts"""
@@ -838,7 +1255,7 @@ class DataProcessor:
                 db.session.flush()  # This assigns an ID to history without committing
                 
                 # Add profile image if available
-                profile_pic_path = data.get('profile_pic_local_path')
+                profile_pic_path = data.get('profile_pic_local')
                 if profile_pic_path:
                     profile_image = AnalysisImage(
                         history_id=history.id,
@@ -851,18 +1268,25 @@ class DataProcessor:
                 # Add post images if available
                 if 'posts' in data:
                     for post in data['posts']:
-                        post_pic_path = post.get('image_local_path')
+                        post_pic_path = post.get('image_local')
                         if post_pic_path:
+                            # Ensure post ID exists
+                            post_id = post.get('id', str(hash(str(post))))
+                            
+                            # Get likes and comments, ensuring we use the right key names
+                            likes = post.get('likes_count') or post.get('likes', 0)
+                            comments = post.get('comments_count') or post.get('comments', 0)
+                            
                             post_image = AnalysisImage(
                                 history_id=history.id,
                                 image_type='post',
                                 image_url=post.get('display_url', ''),
                                 image_path=post_pic_path,
                                 image_metadata={
-                                    'post_id': post.get('id', ''),
+                                    'post_id': post_id,
                                     'shortcode': post.get('shortcode', ''),
-                                    'likes': post.get('likes', 0),
-                                    'comments': post.get('comments', 0)
+                                    'likes': likes,
+                                    'comments': comments
                                 }
                             )
                             db.session.add(post_image)
@@ -872,6 +1296,7 @@ class DataProcessor:
                 
             except Exception as e:
                 print(f"Error saving {username} to history: {str(e)}")
+                traceback.print_exc()  # This will help with debugging
                 continue
         
         # Commit all records
@@ -882,6 +1307,7 @@ class DataProcessor:
         except Exception as e:
             db.session.rollback()
             print(f"Error committing history records: {str(e)}")
+            traceback.print_exc()  # Add stack trace for better debugging
             return None
     
     def load_analysis_from_history(self, history_id):

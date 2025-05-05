@@ -43,6 +43,7 @@ def create_app():
     app.config['UPLOAD_FOLDER'] = os.path.join(base_dir, 'app', 'uploads')
     app.config['DATA_FOLDER'] = os.path.join(base_dir, 'app', 'data')
     app.config['IMAGES_FOLDER'] = os.path.join(base_dir, 'app', 'static', 'images')
+    app.config['LOG_SESSIONS'] = os.getenv('LOG_SESSIONS', 'false').lower() == 'true'
     
     # Initialize extensions with the app
     db.init_app(app)
@@ -88,10 +89,10 @@ def create_app():
         else:
             return f"{value/1000000:.1f}M".replace('.0M', 'M')
     
-    # Debugging: Log session data
+    # Debugging: Log session data only if explicitly enabled
     @app.before_request
     def log_session():
-        if app.debug:
+        if app.config['LOG_SESSIONS']:
             app.logger.debug("Session: %s, Cookies: %s", session, request.cookies)
     
     # Register blueprints

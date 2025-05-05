@@ -1,0 +1,116 @@
+{
+    "run_id": "45093c55-eef6-4ad4-badc-a7a64e97b714",
+    "timestamp": "2025-05-05T00:38:27.753026",
+    "influencer_count": 1,
+    "influencers": [
+        "test_array_user"
+    ],
+    "countries": [
+        "Test Array Country"
+    ],
+    "snapshot": {
+        "test_array_user": {
+            "username": "test_array_user",
+            "full_name": "Test Array User",
+            "biography": "This is a test user for numpy arrays",
+            "external_url": "",
+            "followers_count": 1000,
+            "follows_count": 500,
+            "is_verified": false,
+            "posts_count": 10,
+            "profile_pic_url": "",
+            "business_category": "",
+            "country": "Test Array Country",
+            "processed_at": "2025-05-05 00:38:26",
+            "posts": [
+                {
+                    "id": "test_post_array",
+                    "shortcode": "test456",
+                    "caption": "Test post with arrays for processing",
+                    "likes_count": 200,
+                    "comments_count": 30,
+                    "timestamp": "2025-05-01T12:00:00",
+                    "display_url": "https://example.com/image2.jpg",
+                    "is_video": false,
+                    "image_local": null,
+                    "engagement_rate": 23.0,
+                    "hashtags": [
+                        "tag1",
+                        "tag2",
+                        "tag3"
+                    ],
+                    "mentions": [
+                        "user1",
+                        "user2",
+                        "user3"
+                    ]
+                }
+            ],
+            "profile_pic_local": null,
+            "likes_total": 200,
+            "comments_total": 30,
+            "total_engagement": 230,
+            "avg_likes": 200.0,
+            "avg_comments": 30.0,
+            "engagement_rate": 23.0,
+            "avg_engagement_rate": 23.0,
+            "max_engagement_rate": 23.0,
+            "top_hashtags": [
+                {
+                    "tag": "tag1",
+                    "count": 1
+                },
+                {
+                    "tag": "tag2",
+                    "count": 1
+                },
+                {
+                    "tag": "tag3",
+                    "count": 1
+                }
+            ],
+            "top_mentions": [
+                {
+                    "username": "user1",
+                    "count": 1
+                },
+                {
+                    "username": "user2",
+                    "count": 1
+                },
+                {
+                    "username": "user3",
+                    "count": 1
+                }
+            ],
+            "all_captions": "Test post with arrays for processing\n\n",
+            "engagement_weekly": [
+                {
+                    "date": "2025-05-04",
+                    "likes": 200,
+                    "comments": 30,
+                    "engagement": 230,
+                    "engagement_rate": 23.0
+                }
+            ],
+            "engagement_monthly": [
+                {
+                    "date": "2025-05",
+                    "likes": 200,
+                    "comments": 30,
+                    "engagement": 230,
+                    "engagement_rate": 23.0
+                }
+            ],
+            "engagement_quarterly": [
+                {
+                    "date": "2025-Qq",
+                    "likes": 200,
+                    "comments": 30,
+                    "engagement": 230,
+                    "engagement_rate": 23.0
+                }
+            ]
+        }
+    }
+}

@@ -147,8 +147,8 @@
                             <div class="mb-3">
                                 <h6><i class="fas fa-hashtag me-2"></i>Top Hashtags:</h6>
                                 <div>
-                                    {% for hashtag, count in (influencer.top_hashtags.items()|list)[:3] %}
-                                        <span class="interest-tag">#{{ hashtag }} ({{ count }})</span>
+                                    {% for hashtag_item in influencer.top_hashtags[:3] %}
+                                        <span class="interest-tag">#{{ hashtag_item.tag }} ({{ hashtag_item.count }})</span>
                                     {% endfor %}
                                 </div>
                             </div>

@@ -457,10 +457,6 @@ def influencer_api(username):
     
     influencer = influencers_data[username]
     
-    # Ensure all engagement data keys exist with defaults
-    default_engagement = {'dates': [], 'rates': [], 'likes': [], 'comments': []}
-    post_engagement = influencer.get('post_engagement', default_engagement)
-    
     # Custom JSON serialization function to handle NaN, Infinity values
     def clean_value(value):
         import math
@@ -480,37 +476,88 @@ def influencer_api(username):
         else:
             return value
     
-    # Create properly formatted data for the frontend
-    weekly_engagement = influencer.get('weekly_engagement', {'dates': [], 'rates': []})
-    monthly_engagement = influencer.get('monthly_engagement', {'dates': [], 'rates': []})
-    quarterly_engagement = influencer.get('quarterly_engagement', {'dates': [], 'rates': []})
+    # Extract post-level engagement data from the posts
+    post_engagement = {
+        'dates': [],
+        'engagement_rate': [],
+        'likes': [],
+        'comments': []
+    }
     
-    # Remap the data to match expected frontend keys
+    # Extract post-level data if available
+    if 'posts' in influencer and influencer['posts']:
+        for post in influencer['posts']:
+            # Skip posts without necessary data
+            if not post.get('timestamp'):
+                continue
+                
+            # Add post data
+            post_engagement['dates'].append(post.get('timestamp'))
+            post_engagement['engagement_rate'].append(post.get('engagement_rate', 0))
+            post_engagement['likes'].append(post.get('likes_count', 0))
+            post_engagement['comments'].append(post.get('comments_count', 0))
+    
+    # Process time-based metrics (weekly, monthly, quarterly)
+    # The new format has proper structured objects with date, likes, comments, etc.
+    
+    # Process weekly data
+    weekly_engagement = {
+        'dates': [],
+        'engagement_rate': [],
+        'likes': [],
+        'comments': []
+    }
+    
+    if 'engagement_weekly' in influencer and influencer['engagement_weekly']:
+        for item in influencer['engagement_weekly']:
+            weekly_engagement['dates'].append(item.get('date'))
+            weekly_engagement['engagement_rate'].append(item.get('engagement_rate', 0))
+            weekly_engagement['likes'].append(item.get('likes', 0))
+            weekly_engagement['comments'].append(item.get('comments', 0))
+    
+    # Process monthly data
+    monthly_engagement = {
+        'dates': [],
+        'engagement_rate': [],
+        'likes': [],
+        'comments': []
+    }
+    
+    if 'engagement_monthly' in influencer and influencer['engagement_monthly']:
+        for item in influencer['engagement_monthly']:
+            monthly_engagement['dates'].append(item.get('date'))
+            monthly_engagement['engagement_rate'].append(item.get('engagement_rate', 0))
+            monthly_engagement['likes'].append(item.get('likes', 0))
+            monthly_engagement['comments'].append(item.get('comments', 0))
+    
+    # Process quarterly data
+    quarterly_engagement = {
+        'dates': [],
+        'engagement_rate': [],
+        'likes': [],
+        'comments': []
+    }
+    
+    if 'engagement_quarterly' in influencer and influencer['engagement_quarterly']:
+        for item in influencer['engagement_quarterly']:
+            quarterly_engagement['dates'].append(item.get('date'))
+            quarterly_engagement['engagement_rate'].append(item.get('engagement_rate', 0))
+            quarterly_engagement['likes'].append(item.get('likes', 0))
+            quarterly_engagement['comments'].append(item.get('comments', 0))
+    
+    # Create response data
     response_data = {
-        'post_engagement': {
-            'dates': clean_value(post_engagement.get('dates', [])),
-            'engagement_rate': clean_value(post_engagement.get('rates', [])),
-            'likes': clean_value(post_engagement.get('likes', [])),
-            'comments': clean_value(post_engagement.get('comments', []))
-        },
-        'weekly_engagement': {
-            'dates': clean_value(weekly_engagement.get('dates', [])),
-            'engagement_rate': clean_value(weekly_engagement.get('rates', [])),
-            'likes': clean_value(weekly_engagement.get('likes', [])) if 'likes' in weekly_engagement else [],
-            'comments': clean_value(weekly_engagement.get('comments', [])) if 'comments' in weekly_engagement else []
-        },
-        'monthly_engagement': {
-            'dates': clean_value(monthly_engagement.get('dates', [])),
-            'engagement_rate': clean_value(monthly_engagement.get('rates', [])),
-            'likes': clean_value(monthly_engagement.get('likes', [])) if 'likes' in monthly_engagement else [],
-            'comments': clean_value(monthly_engagement.get('comments', [])) if 'comments' in monthly_engagement else []
-        },
-        'quarterly_engagement': {
-            'dates': clean_value(quarterly_engagement.get('dates', [])),
-            'engagement_rate': clean_value(quarterly_engagement.get('rates', [])),
-            'likes': clean_value(quarterly_engagement.get('likes', [])) if 'likes' in quarterly_engagement else [],
-            'comments': clean_value(quarterly_engagement.get('comments', [])) if 'comments' in quarterly_engagement else []
-        }
+        'post_engagement': clean_value(post_engagement),
+        'weekly_engagement': clean_value(weekly_engagement),
+        'monthly_engagement': clean_value(monthly_engagement),
+        'quarterly_engagement': clean_value(quarterly_engagement),
+        'avg_engagement_rate': clean_value(influencer.get('avg_engagement_rate', 0)),
+        'max_engagement_rate': clean_value(influencer.get('max_engagement_rate', 0)),
+        'avg_likes': clean_value(influencer.get('avg_likes', 0)),
+        'avg_comments': clean_value(influencer.get('avg_comments', 0)),
+        'total_engagement': clean_value(influencer.get('total_engagement', 0)),
+        'top_hashtags': clean_value(influencer.get('top_hashtags', [])),
+        'top_mentions': clean_value(influencer.get('top_mentions', []))
     }
     
     # Additional error handling with try-except
@@ -518,6 +565,7 @@ def influencer_api(username):
         return jsonify(response_data)
     except Exception as e:
         print(f"Error serializing data for {username}: {e}")
+        traceback.print_exc()
         # Fallback with minimal data
         return jsonify({
             'error': str(e),

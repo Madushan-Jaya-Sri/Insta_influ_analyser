@@ -3,6 +3,7 @@ from run import db # Import db from run.py
 from sqlalchemy.dialects.sqlite import JSON # Or postgresql.JSON if using PostgreSQL
 
 class History(db.Model):
+    __tablename__ = 'history'
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, index=True, default=datetime.datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) # Foreign key to User model
@@ -37,6 +38,7 @@ class History(db.Model):
         }
 
 class AnalysisImage(db.Model):
+    __tablename__ = 'analysis_image'
     id = db.Column(db.Integer, primary_key=True)
     history_id = db.Column(db.Integer, db.ForeignKey('history.id'), nullable=False)
     image_type = db.Column(db.String(20), nullable=False)  # 'profile', 'post', etc.

@@ -1,0 +1,24 @@
+[
+    {
+        "run_id": "9c8fc2b0-1b89-44ac-b2af-eb5360101cb2",
+        "timestamp": "2025-05-05T00:42:05.813724",
+        "influencer_count": 1,
+        "influencers": [
+            "jazhand"
+        ],
+        "countries": [
+            "Other"
+        ]
+    },
+    {
+        "run_id": "dfc84fec-9f92-40a3-9e15-1958fe9e9e4e",
+        "timestamp": "2025-05-05T00:13:31.082430",
+        "influencer_count": 1,
+        "influencers": [
+            "vivianssf"
+        ],
+        "countries": [
+            "Other"
+        ]
+    }
+]

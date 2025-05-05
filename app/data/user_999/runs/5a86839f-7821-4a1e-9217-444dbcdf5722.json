@@ -1,0 +1,106 @@
+{
+    "run_id": "5a86839f-7821-4a1e-9217-444dbcdf5722",
+    "timestamp": "2025-05-05T00:38:02.469302",
+    "influencer_count": 1,
+    "influencers": [
+        "test_user"
+    ],
+    "countries": [
+        "Test Country"
+    ],
+    "snapshot": {
+        "test_user": {
+            "username": "test_user",
+            "full_name": "Test User",
+            "biography": "This is a test user",
+            "external_url": "",
+            "followers_count": 1000,
+            "follows_count": 500,
+            "is_verified": false,
+            "posts_count": 10,
+            "profile_pic_url": "",
+            "business_category": "",
+            "country": "Test Country",
+            "processed_at": "2025-05-05 00:38:01",
+            "posts": [
+                {
+                    "id": "test_post_1",
+                    "shortcode": "test123",
+                    "caption": "Test post with @mention and #hashtag",
+                    "likes_count": 100,
+                    "comments_count": 20,
+                    "timestamp": "2025-05-01T12:00:00",
+                    "display_url": "https://example.com/image.jpg",
+                    "is_video": false,
+                    "image_local": null,
+                    "engagement_rate": 12.0,
+                    "hashtags": [
+                        "tag1",
+                        "tag2"
+                    ],
+                    "mentions": [
+                        "user1",
+                        "user2"
+                    ]
+                }
+            ],
+            "profile_pic_local": null,
+            "likes_total": 100,
+            "comments_total": 20,
+            "total_engagement": 120,
+            "avg_likes": 100.0,
+            "avg_comments": 20.0,
+            "engagement_rate": 12.0,
+            "avg_engagement_rate": 12.0,
+            "max_engagement_rate": 12.0,
+            "top_hashtags": [
+                {
+                    "tag": "tag1",
+                    "count": 1
+                },
+                {
+                    "tag": "tag2",
+                    "count": 1
+                }
+            ],
+            "top_mentions": [
+                {
+                    "username": "user1",
+                    "count": 1
+                },
+                {
+                    "username": "user2",
+                    "count": 1
+                }
+            ],
+            "all_captions": "Test post with @mention and #hashtag\n\n",
+            "engagement_weekly": [
+                {
+                    "date": "2025-05-04",
+                    "likes": 100,
+                    "comments": 20,
+                    "engagement": 120,
+                    "engagement_rate": 12.0
+                }
+            ],
+            "engagement_monthly": [
+                {
+                    "date": "2025-05",
+                    "likes": 100,
+                    "comments": 20,
+                    "engagement": 120,
+                    "engagement_rate": 12.0
+                }
+            ],
+            "engagement_quarterly": [
+                {
+                    "date": "2025-Qq",
+                    "likes": 100,
+                    "comments": 20,
+                    "engagement": 120,
+                    "engagement_rate": 12.0
+                }
+            ]
+        }
+    }
+}

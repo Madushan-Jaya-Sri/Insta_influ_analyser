@@ -395,10 +395,10 @@
                     <h5 class="mb-0"><i class="fas fa-hashtag me-2"></i>Top Hashtags</h5>
                 </div>
                 <div class="card-body">
-                    {% if influencer.get('top_hashtags') and influencer.top_hashtags.items()|length > 0 %}
+                    {% if influencer.get('top_hashtags') and influencer.top_hashtags|length > 0 %}
                         <div class="mb-3">
-                            {% for hashtag, count in influencer.top_hashtags.items() %}
-                                <div class="interest-tag">#{{ hashtag }} ({{ count }})</div>
+                            {% for hashtag_item in influencer.top_hashtags %}
+                                <div class="interest-tag">#{{ hashtag_item.tag }} ({{ hashtag_item.count }})</div>
                             {% endfor %}
                         </div>
                         
@@ -420,10 +420,10 @@
                     <h5 class="mb-0"><i class="fas fa-at me-2"></i>Top Mentions</h5>
                 </div>
                 <div class="card-body">
-                    {% if influencer.get('top_mentions') and influencer.top_mentions.items()|length > 0 %}
+                    {% if influencer.get('top_mentions') and influencer.top_mentions|length > 0 %}
                         <div class="mb-3">
-                            {% for mention, count in influencer.top_mentions.items() %}
-                                <div class="interest-tag">@{{ mention }} ({{ count }})</div>
+                            {% for mention_item in influencer.top_mentions %}
+                                <div class="interest-tag">@{{ mention_item.username }} ({{ mention_item.count }})</div>
                             {% endfor %}
                         </div>
                     {% else %}
@@ -444,8 +444,10 @@
                 <div class="scroll-cards">
                     {% for post in influencer.posts %}
                         <div class="card">
-                            {% if post.display_url_local %}
-                                <img src="{{ url_for('static', filename=post.display_url_local) }}" class="card-img-top" alt="Instagram Post">
+                            {% if post.get('image_local') %}
+                                <img src="{{ url_for('static', filename=post.image_local) }}" class="card-img-top" alt="Instagram Post">
+                            {% elif post.get('display_url') %}
+                                <img src="{{ post.display_url }}" class="card-img-top" alt="Instagram Post">
                             {% else %}
                                 <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 300px;">
                                     <i class="fas fa-image fa-3x text-muted"></i>
@@ -453,14 +455,29 @@
                             {% endif %}
                             <div class="card-body">
                                 <p class="card-text small">{{ post.caption|truncate(100) }}</p>
-                                <div class="d-flex justify-content-between">
+                                <div class="d-flex justify-content-between align-items-center mt-2">
                                     <div class="engagement-metric">
                                         <i class="fas fa-heart text-danger"></i> {{ '{:,}'.format(post.likes_count) }}
                                     </div>
                                     <div class="engagement-metric">
                                         <i class="fas fa-comment text-primary"></i> {{ '{:,}'.format(post.comments_count) }}
                                     </div>
+                                    {% if post.get('engagement_rate') %}
+                                    <div class="engagement-badge badge bg-gradient-primary">
+                                        {{ '{:.2f}'.format(post.engagement_rate) }}% Engagement
+                                    </div>
+                                    {% endif %}
                                 </div>
+                                {% if post.get('hashtags') and post.hashtags|length > 0 %}
+                                <div class="hashtags mt-2">
+                                    {% for tag in post.hashtags[:5] %}
+                                        <span class="badge bg-light text-dark">#{{ tag }}</span>
+                                    {% endfor %}
+                                    {% if post.hashtags|length > 5 %}
+                                        <span class="badge bg-light text-dark">+{{ post.hashtags|length - 5 }} more</span>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                     {% endfor %}

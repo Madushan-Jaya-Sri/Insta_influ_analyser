@@ -1,0 +1,24 @@
+[
+    {
+        "run_id": "9626f9bd-b1c5-4344-9835-9ee97ec485b9",
+        "timestamp": "2025-05-05T00:47:56.155458",
+        "influencer_count": 1,
+        "influencers": [
+            "test_user"
+        ],
+        "countries": [
+            "Test Country"
+        ]
+    },
+    {
+        "run_id": "5a86839f-7821-4a1e-9217-444dbcdf5722",
+        "timestamp": "2025-05-05T00:38:02.469302",
+        "influencer_count": 1,
+        "influencers": [
+            "test_user"
+        ],
+        "countries": [
+            "Test Country"
+        ]
+    }
+]

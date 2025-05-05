@@ -495,6 +495,9 @@
             const viewStatusBtn = document.getElementById('viewStatus');
             const dismissStatusBtn = document.getElementById('dismissStatus');
             
+            // Check if we're already on the processing page
+            const isProcessingPage = window.location.pathname === '{{ url_for("main.processing") }}';
+            
             // Initialize status polling
             let statusPollInterval = null;
             
@@ -520,6 +523,12 @@
                 fetch('{{ url_for("main.check_processing_status") }}')
                     .then(response => response.json())
                     .then(data => {
+                        // If we're on the processing page, don't show the popup
+                        if (isProcessingPage) {
+                            hideProcessingStatus();
+                            return;
+                        }
+                        
                         if (data.status === 'processing') {
                             // Show processing notification
                             showProcessingStatus('processing', data.message || 'Processing your data...', 50, data.redirect_url || '{{ url_for("main.processing") }}');
@@ -582,8 +591,10 @@
                 hideProcessingStatus();
             });
             
-            // Start polling for status updates when page loads
-            startStatusPolling();
+            // Start polling for status updates when page loads, but only if not on processing page
+            if (!isProcessingPage) {
+                startStatusPolling();
+            }
         });
     </script>
     
