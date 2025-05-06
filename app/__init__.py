@@ -3,7 +3,10 @@
 
 import os
 import datetime
-from flask import Flask, session, request
+import logging
+from logging.handlers import RotatingFileHandler
+import traceback
+from flask import Flask, session, request, jsonify
 from flask_login import LoginManager
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
@@ -45,11 +48,45 @@ def create_app():
     app.config['IMAGES_FOLDER'] = os.path.join(base_dir, 'app', 'static', 'images')
     app.config['LOG_SESSIONS'] = os.getenv('LOG_SESSIONS', 'false').lower() == 'true'
     
+    # Setup logging for production environment
+    if not app.debug and not app.testing:
+        # Ensure log directory exists
+        log_dir = os.path.join(base_dir, 'logs')
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        
+        # Create a rotating file handler
+        file_handler = RotatingFileHandler(
+            os.path.join(log_dir, 'app.log'),
+            maxBytes=10485760,  # 10MB
+            backupCount=10
+        )
+        file_handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+        ))
+        file_handler.setLevel(logging.INFO)
+        app.logger.addHandler(file_handler)
+        
+        app.logger.setLevel(logging.INFO)
+        app.logger.info('Instagram Influencer Analyzer startup')
+    
     # Initialize extensions with the app
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
     Session(app)
+    
+    # Error handler for production 500 errors
+    @app.errorhandler(500)
+    def internal_error(error):
+        app.logger.error(f'Server Error: {error}\n{traceback.format_exc()}')
+        return jsonify(error="Internal server error. This has been logged and will be addressed."), 500
+    
+    # Error handler for production 502 errors (proxy errors)
+    @app.errorhandler(502)
+    def bad_gateway(error):
+        app.logger.error(f'Bad Gateway Error: {error}')
+        return jsonify(error="Bad gateway error. Please check your server configuration."), 502
     
     # Ensure folders exist
     for folder in [app.config['UPLOAD_FOLDER'], app.config['DATA_FOLDER'], app.config['IMAGES_FOLDER'], app.config['SESSION_FILE_DIR']]:
