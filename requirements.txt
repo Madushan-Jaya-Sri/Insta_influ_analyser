@@ -28,6 +28,7 @@ beautifulsoup4==4.11.1
 
 # API integrations
 openai==0.28.0  # Using old version for compatibility
+apify-client==1.1.0  # Required for Instagram data scraping
 
 # Others
 python-dotenv==0.20.0
