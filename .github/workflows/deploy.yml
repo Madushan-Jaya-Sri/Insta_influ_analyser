@@ -115,7 +115,9 @@ jobs:
             # Fix wordcloud dependency in requirements.txt
             echo "Fixing wordcloud dependency in requirements.txt..."
             if [ -f requirements.txt ]; then
-              sed -i 's/wordcloud==1.8.1/wordcloud-binary==1.8.1/g' requirements.txt
+              # Comment out any wordcloud references to handle separately
+              sed -i 's/wordcloud==1.8.1/# wordcloud==1.8.1 - Will be installed separately/g' requirements.txt
+              sed -i 's/wordcloud-binary==1.8.1/# wordcloud-binary==1.8.1 - Will be installed separately/g' requirements.txt
             else
               echo "Creating requirements.txt..."
               echo "Flask==2.0.1" > requirements.txt
@@ -125,7 +127,7 @@ jobs:
               echo "ipython==8.18.1" >> requirements.txt
               echo "SQLAlchemy==2.0.4" >> requirements.txt
               echo "Werkzeug==2.0.3" >> requirements.txt
-              echo "wordcloud-binary==1.8.1" >> requirements.txt
+              echo "# wordcloud==1.8.1 - Will be installed separately" >> requirements.txt
             fi
             
             # Copy static files if they exist
@@ -188,16 +190,15 @@ jobs:
             echo '# Copy requirements first' >> Dockerfile.app
             echo 'COPY requirements.txt .' >> Dockerfile.app
             echo '' >> Dockerfile.app 
-            echo '# Modify requirements to use wordcloud-binary' >> Dockerfile.app
-            echo 'RUN grep -q "wordcloud==1.8.1" requirements.txt && \' >> Dockerfile.app
-            echo '    sed -i "s/wordcloud==1.8.1/wordcloud-binary==1.8.1/g" requirements.txt || echo "No wordcloud replacement needed"' >> Dockerfile.app
+            echo '# Ensure wordcloud is commented out in requirements' >> Dockerfile.app
+            echo 'RUN sed -i "s/wordcloud==1.8.1/# wordcloud==1.8.1 - Will be installed separately/g" requirements.txt && \' >> Dockerfile.app
+            echo '    sed -i "s/wordcloud-binary==1.8.1/# wordcloud-binary==1.8.1 - Will be installed separately/g" requirements.txt' >> Dockerfile.app
             echo '' >> Dockerfile.app
             echo '# Install dependencies' >> Dockerfile.app
             echo 'RUN pip install --upgrade pip && \' >> Dockerfile.app
             echo '    pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 Werkzeug==2.0.3 && \' >> Dockerfile.app
-            echo '    pip install --no-cache-dir --prefer-binary -r requirements.txt || \' >> Dockerfile.app
-            echo '    (pip install --no-cache-dir --no-deps wordcloud-binary==1.8.1 && \' >> Dockerfile.app
-            echo '     pip install --no-cache-dir -r requirements.txt --no-deps)' >> Dockerfile.app
+            echo '    pip install --no-cache-dir --prefer-binary -r requirements.txt && \' >> Dockerfile.app
+            echo '    pip install --no-cache-dir wordcloud==1.8.1' >> Dockerfile.app
             echo '' >> Dockerfile.app
             echo '# Copy application code' >> Dockerfile.app
             echo 'COPY . .' >> Dockerfile.app

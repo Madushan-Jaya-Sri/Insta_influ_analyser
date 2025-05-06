@@ -18,8 +18,8 @@ pandas==1.4.2
 matplotlib==3.5.2
 scikit-learn==1.0.2
 scipy==1.8.1
-# Use wordcloud-binary instead of wordcloud to avoid gcc build issues
-wordcloud-binary==1.8.1
+# wordcloud will be installed separately in the Dockerfile with proper build tools
+# wordcloud==1.8.1
 Pillow==9.1.1
 
 # HTTP requests
