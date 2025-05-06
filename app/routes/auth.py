@@ -3,7 +3,17 @@ from flask import (
     flash, session, current_app
 )
 from flask_login import login_user, logout_user, login_required, current_user
-from werkzeug.urls import url_parse
+
+# Fix for werkzeug url_parse compatibility
+try:
+    from werkzeug.urls import url_parse
+except ImportError:
+    # Fallback for older versions
+    from werkzeug.urls import url_decode as _url_decode
+    from werkzeug.urls import url_split
+    
+    def url_parse(url):
+        return url_split(url)
 
 # Updated imports for models and forms
 from app.forms import LoginForm, RegistrationForm
