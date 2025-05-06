@@ -1,7 +1,7 @@
 FROM python:3.10-slim
 
-# Install Nginx and required packages
-RUN apt-get update && apt-get install -y nginx curl unzip \
+# Install Nginx and required packages including build essential tools for wordcloud
+RUN apt-get update && apt-get install -y nginx curl unzip gcc build-essential python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Nginx config
@@ -34,10 +34,22 @@ RUN touch /app/app/static/images/brand/momentro-logo.png \
 # Ensure directories have proper permissions
 RUN chmod -R 777 /app/app/static /app/app/uploads /app/app/data
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
+# Copy requirements first without installing (we'll modify it)
+COPY requirements.txt /app/
+
+# Modify requirements to use pre-built wordcloud if possible
+RUN grep -q "wordcloud==1.8.1" requirements.txt && \
+    sed -i 's/wordcloud==1.8.1/wordcloud-binary==1.8.1/g' requirements.txt || echo "No wordcloud replacement needed"
+
+# Install dependencies with proper setup
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt || (cat /tmp/pip-log.txt && exit 1)
+    pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 Werkzeug==2.0.3 && \
+    # Try to install using wheels first, then fallback to source if needed
+    pip install --no-cache-dir --prefer-binary -r requirements.txt || \
+    # If the initial install fails, try installing wordcloud separately 
+    (pip install --no-cache-dir --no-deps wordcloud-binary==1.8.1 && \
+     sed -i 's/wordcloud==1.8.1/#wordcloud==1.8.1 # Replaced with binary/g' requirements.txt && \
+     pip install --no-cache-dir -r requirements.txt)
 
 # Copy application code
 COPY . .

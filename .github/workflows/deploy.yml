@@ -112,8 +112,11 @@ jobs:
             echo '    flash("You have been logged out.", "info")' >> app/routes/auth.py
             echo '    return redirect(url_for("main.index"))' >> app/routes/auth.py
             
-            # Ensure we have a requirements.txt file
-            if [ ! -f requirements.txt ]; then
+            # Fix wordcloud dependency in requirements.txt
+            echo "Fixing wordcloud dependency in requirements.txt..."
+            if [ -f requirements.txt ]; then
+              sed -i 's/wordcloud==1.8.1/wordcloud-binary==1.8.1/g' requirements.txt
+            else
               echo "Creating requirements.txt..."
               echo "Flask==2.0.1" > requirements.txt
               echo "Flask-Login==0.5.0" >> requirements.txt
@@ -121,10 +124,8 @@ jobs:
               echo "gunicorn==21.2.0" >> requirements.txt
               echo "ipython==8.18.1" >> requirements.txt
               echo "SQLAlchemy==2.0.4" >> requirements.txt
-              echo "Werkzeug==2.0.1" >> requirements.txt
-            else
-              # Fix ipython version
-              sed -i 's/ipython==9.1.0/ipython==8.18.1/g' requirements.txt
+              echo "Werkzeug==2.0.3" >> requirements.txt
+              echo "wordcloud-binary==1.8.1" >> requirements.txt
             fi
             
             # Copy static files if they exist
@@ -174,17 +175,29 @@ jobs:
             echo 'if __name__ == "__main__":' >> wsgi.py
             echo '    app.run()' >> wsgi.py
             
-            # Create Dockerfile.app line by line to avoid heredoc issues
+            # Create improved Dockerfile.app that handles wordcloud dependency correctly
             echo 'FROM python:3.10-slim' > Dockerfile.app
+            echo '' >> Dockerfile.app
+            echo '# Install dependencies needed for wordcloud compilation' >> Dockerfile.app
+            echo 'RUN apt-get update && apt-get install -y gcc build-essential python3-dev \' >> Dockerfile.app
+            echo '    && rm -rf /var/lib/apt/lists/*' >> Dockerfile.app
             echo '' >> Dockerfile.app
             echo '# Set working directory' >> Dockerfile.app
             echo 'WORKDIR /app' >> Dockerfile.app
             echo '' >> Dockerfile.app
-            echo '# Install dependencies' >> Dockerfile.app
+            echo '# Copy requirements first' >> Dockerfile.app
             echo 'COPY requirements.txt .' >> Dockerfile.app
+            echo '' >> Dockerfile.app 
+            echo '# Modify requirements to use wordcloud-binary' >> Dockerfile.app
+            echo 'RUN grep -q "wordcloud==1.8.1" requirements.txt && \' >> Dockerfile.app
+            echo '    sed -i "s/wordcloud==1.8.1/wordcloud-binary==1.8.1/g" requirements.txt || echo "No wordcloud replacement needed"' >> Dockerfile.app
+            echo '' >> Dockerfile.app
+            echo '# Install dependencies' >> Dockerfile.app
             echo 'RUN pip install --upgrade pip && \' >> Dockerfile.app
-            echo '    pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 && \' >> Dockerfile.app
-            echo '    pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -r requirements.txt --no-deps' >> Dockerfile.app
+            echo '    pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 Werkzeug==2.0.3 && \' >> Dockerfile.app
+            echo '    pip install --no-cache-dir --prefer-binary -r requirements.txt || \' >> Dockerfile.app
+            echo '    (pip install --no-cache-dir --no-deps wordcloud-binary==1.8.1 && \' >> Dockerfile.app
+            echo '     pip install --no-cache-dir -r requirements.txt --no-deps)' >> Dockerfile.app
             echo '' >> Dockerfile.app
             echo '# Copy application code' >> Dockerfile.app
             echo 'COPY . .' >> Dockerfile.app
@@ -242,6 +255,10 @@ jobs:
             echo '        proxy_set_header X-Real-IP $remote_addr;' >> docker-nginx.conf
             echo '        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' >> docker-nginx.conf
             echo '        proxy_set_header X-Forwarded-Proto $scheme;' >> docker-nginx.conf
+            echo '        # Increase timeout settings' >> docker-nginx.conf
+            echo '        proxy_read_timeout 300;' >> docker-nginx.conf
+            echo '        proxy_connect_timeout 300;' >> docker-nginx.conf
+            echo '        proxy_send_timeout 300;' >> docker-nginx.conf
             echo '    }' >> docker-nginx.conf
             echo '}' >> docker-nginx.conf
             
