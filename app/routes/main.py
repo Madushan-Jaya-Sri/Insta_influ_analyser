@@ -25,9 +25,6 @@ from app import db
 # Define APP_ROOT for use throughout this file
 APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Import blueprint from minimal_main to avoid circular imports
-from app.routes.minimal_main import main_bp
-
 # Global data processor dictionary - maps user IDs to their DataProcessor instances
 data_processors = {}
 

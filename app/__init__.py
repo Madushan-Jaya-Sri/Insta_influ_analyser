@@ -31,7 +31,7 @@ def create_app():
                 static_url_path='/static')
     
     # Configure app
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-please-change') # Use a more descriptive default
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-please-change')
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', f'sqlite:///{os.path.join(base_dir, "app.db")}')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SESSION_TYPE'] = 'filesystem'
@@ -52,8 +52,12 @@ def create_app():
     if not app.debug and not app.testing:
         # Ensure log directory exists
         log_dir = os.path.join(base_dir, 'logs')
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
+        try:
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+        except FileExistsError:
+            # Directory already exists, which is fine
+            pass
         
         # Create a rotating file handler
         file_handler = RotatingFileHandler(
@@ -134,12 +138,12 @@ def create_app():
     
     # Register blueprints - move the imports inside the function to avoid circular imports
     def register_blueprints(app):
-        # Import from minimal_main to avoid circular imports
+        # Import blueprints
         from app.routes.minimal_main import main_bp
-        app.register_blueprint(main_bp)
-    
-        # Import auth_bp directly from auth.py
         from app.routes.auth import auth_bp
+        
+        # Register blueprints
+        app.register_blueprint(main_bp)
         app.register_blueprint(auth_bp, url_prefix='/auth')
     
     # Call the blueprint registration function
