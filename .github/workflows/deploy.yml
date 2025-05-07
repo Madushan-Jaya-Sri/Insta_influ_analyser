@@ -94,8 +94,10 @@ jobs:
             cat > Dockerfile << EOF
             FROM python:3.10-slim
 
-            # Install Nginx and required packages
-            RUN apt-get update && apt-get install -y nginx curl unzip gcc build-essential python3-dev \\
+            # Install Nginx and required packages for wordcloud and other dependencies
+            RUN apt-get update && apt-get install -y nginx curl unzip gcc g++ build-essential \\
+                python3-dev default-libmysqlclient-dev libpng-dev \\
+                libfreetype6-dev pkg-config \\
                 && rm -rf /var/lib/apt/lists/*
 
             # Set working directory
@@ -105,11 +107,21 @@ jobs:
             RUN mkdir -p /app/app/static /app/app/uploads /app/app/data
             RUN chmod -R 777 /app/app/static /app/app/uploads /app/app/data
 
-            # Copy requirements first and install dependencies
+            # Copy requirements first without installing
             COPY requirements.txt /app/
+
+            # Install basic requirements first
             RUN pip install --upgrade pip && \\
-                pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 Werkzeug==2.0.3 && \\
-                pip install --no-cache-dir --prefer-binary -r requirements.txt
+                pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 Werkzeug==2.0.3
+
+            # Install numpy, matplotlib, and other numerical packages first
+            RUN pip install --no-cache-dir numpy pandas matplotlib pillow
+
+            # Install wordcloud specifically with all dependencies
+            RUN pip install --no-cache-dir wordcloud==1.8.1
+
+            # Now install remaining requirements
+            RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 
             # Copy application code
             COPY . .
@@ -117,6 +129,9 @@ jobs:
             # Make scripts executable
             RUN if [ -f /app/fix_auth.sh ]; then chmod +x /app/fix_auth.sh; fi
             RUN if [ -f /app/emergency_fix.py ]; then chmod +x /app/emergency_fix.py; fi
+
+            # Create a simple test to verify wordcloud is installed properly
+            RUN python -c "import wordcloud; print('Wordcloud installed successfully!')"
 
             # Expose port
             EXPOSE 8001
