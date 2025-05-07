@@ -59,9 +59,12 @@ COPY cleanup.sh /cleanup.sh
 RUN chmod +x /cleanup.sh
 COPY fix_auth.sh /fix_auth.sh
 RUN chmod +x /fix_auth.sh
+COPY emergency_fix.py /emergency_fix.py
+RUN chmod +x /emergency_fix.py
 
-# Run the fix script to fix auth.py
+# Run both fix scripts to ensure auth.py is correct
 RUN /fix_auth.sh
+RUN python /emergency_fix.py
 
 # Clean up unnecessary files
 RUN find . -name "*.pyc" -delete && \
