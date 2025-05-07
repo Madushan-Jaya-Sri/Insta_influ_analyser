@@ -9,13 +9,12 @@ import traceback
 from flask import Flask, session, request, jsonify
 from flask_login import LoginManager
 from flask_session import Session
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
 from dotenv import load_dotenv
 
-# Initialize extensions globally but without app context initially
-db = SQLAlchemy()
-migrate = Migrate()
+# Import database from the centralized location
+from app.database import db, init_db
+
+# Initialize login manager
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
 login_manager.login_message = 'Please log in to access this page.'
@@ -75,8 +74,7 @@ def create_app():
         app.logger.info('Instagram Influencer Analyzer startup')
     
     # Initialize extensions with the app
-    db.init_app(app)
-    migrate.init_app(app, db)
+    init_db(app)  # Initialize database using the centralized function
     login_manager.init_app(app)
     Session(app)
     
@@ -148,10 +146,5 @@ def create_app():
     
     # Call the blueprint registration function
     register_blueprints(app)
-    
-    # Create database tables if they don't exist (for simple setup without full migrations initially)
-    # Consider using Flask-Migrate commands for production/better management
-    with app.app_context():
-        db.create_all()
     
     return app

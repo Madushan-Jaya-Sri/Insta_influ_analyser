@@ -19,8 +19,8 @@ except ImportError:
 from app.forms import LoginForm, RegistrationForm
 from app.models.user import User
 from app.models.history import History
-# Import db from app package directly
-from app import db
+# Import db from the centralized database module
+from app.database import db
 
 # Create the blueprint directly here
 auth_bp = Blueprint('auth', __name__)
