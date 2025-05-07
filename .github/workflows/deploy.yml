@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -20,6 +21,8 @@ jobs:
           host: ${{ secrets.AWS_HOST }}
           username: ${{ secrets.AWS_USERNAME }}
           key: ${{ secrets.AWS_SSH_KEY }}
+          script_stop: true
+          command_timeout: 40m
           script: |
             echo "Starting deployment process..."
             
@@ -32,6 +35,7 @@ jobs:
             mkdir -p "$DATA_DIR/uploads"
             mkdir -p "$DATA_DIR/data"
             mkdir -p "$DATA_DIR/logs"
+            mkdir -p "$DATA_DIR/docker-cache"
             
             # Force proper permissions on data directory
             sudo chown -R $(whoami):$(whoami) "$DATA_DIR"
@@ -77,6 +81,25 @@ jobs:
             ln -sf "$DATA_DIR/data" "$WORK_DIR/app/data"
             ln -sf "$DATA_DIR/logs" "$WORK_DIR/logs"
             
+            # Optimize Docker build - pre-pull the base image
+            echo "Pre-pulling base Python image to speed up build..."
+            docker pull python:3.10-slim
+            
+            # Create docker-compose override file with build cache
+            cat > docker-compose.override.yml << EOF
+            version: '3.8'
+            
+            services:
+              app:
+                build:
+                  context: .
+                  dockerfile: Dockerfile
+                  args:
+                    - BUILDKIT_INLINE_CACHE=1
+                volumes:
+                  - $DATA_DIR/docker-cache:/root/.cache/pip
+            EOF
+            
             # Build and start Docker containers
             echo "Building and starting Docker containers..."
             cd "$WORK_DIR"
@@ -91,13 +114,31 @@ jobs:
             # Stop any existing containers
             $COMPOSE_CMD down || true
             
-            # Build and start the new containers
-            $COMPOSE_CMD build --no-cache
+            # Build and start the new containers with increased timeout
+            export COMPOSE_HTTP_TIMEOUT=600
+            export DOCKER_CLIENT_TIMEOUT=600
+            
+            # Build with retry mechanism
+            MAX_RETRIES=3
+            RETRY_COUNT=0
+            
+            until $COMPOSE_CMD build --no-cache || [ $RETRY_COUNT -eq $MAX_RETRIES ]; do
+              RETRY_COUNT=$((RETRY_COUNT+1))
+              echo "Build failed, retrying ($RETRY_COUNT/$MAX_RETRIES)..."
+              sleep 5
+            done
+            
+            if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+              echo "Build failed after $MAX_RETRIES attempts. Exiting."
+              exit 1
+            fi
+            
+            # Start containers
             $COMPOSE_CMD up -d
             
             # Give the container time to start
             echo "Waiting for containers to start..."
-            sleep 10
+            sleep 20
             
             # Check container status
             CONTAINER_ID=$($COMPOSE_CMD ps -q app)
