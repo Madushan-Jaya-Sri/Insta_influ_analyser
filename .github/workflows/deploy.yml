@@ -315,17 +315,20 @@ jobs:
             if docker ps | grep -q "instagram-app" && docker ps | grep -q "instagram-nginx"; then
               echo "Containers are running successfully."
               
-              # Initialize the database
-              echo "Initializing database..."
-              docker exec instagram-app bash -c 'python -m flask db init || true'
-              docker exec instagram-app bash -c 'python -m flask db migrate -m "initial migration" || true'
-              docker exec instagram-app bash -c 'python -m flask db upgrade || true'
+              # Copy the database fix script to the container
+              echo "Copying database fix script to container..."
+              docker cp "$WORK_DIR/fix_database.py" instagram-app:/app/fix_database.py
+              docker exec instagram-app chmod +x /app/fix_database.py
+              
+              # Run the database fix script
+              echo "Running database fix script..."
+              docker exec instagram-app python /app/fix_database.py
               
               # Fix database permissions
               docker exec instagram-app bash -c 'chmod 666 /app/app.db'
               
               # Verify database initialization
-              docker exec instagram-app bash -c 'sqlite3 /app/app.db "SELECT name FROM sqlite_master WHERE type=\"table\";"'
+              docker exec instagram-app bash -c 'sqlite3 /app/app.db ".tables"'
               
               echo "Deployment successful with database initialization!"
               echo "To check application logs for errors, run: docker exec instagram-app cat /app/logs/app.log"
