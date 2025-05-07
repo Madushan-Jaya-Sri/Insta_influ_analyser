@@ -21,8 +21,7 @@ jobs:
           host: ${{ secrets.AWS_HOST }}
           username: ${{ secrets.AWS_USERNAME }}
           key: ${{ secrets.AWS_SSH_KEY }}
-          script_stop: true
-          command_timeout: 40m
+          timeout: 40m
           script: |
             echo "Starting deployment process..."
             
@@ -81,23 +80,62 @@ jobs:
             ln -sf "$DATA_DIR/data" "$WORK_DIR/app/data"
             ln -sf "$DATA_DIR/logs" "$WORK_DIR/logs"
             
+            # Clean up existing containers
+            echo "Cleaning up existing containers..."
+            docker rm -f instagram-app instagram-nginx fresh_deployment-app-1 || true
+            
             # Optimize Docker build - pre-pull the base image
             echo "Pre-pulling base Python image to speed up build..."
             docker pull python:3.10-slim
             
-            # Create docker-compose override file with build cache
-            cat > docker-compose.override.yml << EOF
+            # Update docker-compose.yml to ensure only two containers
+            cat > docker-compose.yml << EOF
             version: '3.8'
             
             services:
               app:
+                container_name: instagram-app
                 build:
                   context: .
                   dockerfile: Dockerfile
-                  args:
-                    - BUILDKIT_INLINE_CACHE=1
+                restart: unless-stopped
+                environment:
+                  - FLASK_APP=app
+                  - FLASK_ENV=production
+                  - FLASK_DEBUG=0
+                  - SECRET_KEY=\${SECRET_KEY}
+                  - DATABASE_URL=\${DATABASE_URL:-sqlite:///app.db}
+                  - LOG_LEVEL=INFO
+                  - PYTHONUNBUFFERED=1
+                  - APIFY_API_TOKEN=\${APIFY_API_TOKEN}
+                  - OPENAI_API_KEY=\${OPENAI_API_KEY}
                 volumes:
+                  - ./app/static:/app/app/static
+                  - ./app/uploads:/app/app/uploads
+                  - ./app/data:/app/app/data
+                  - ./logs:/app/logs
                   - $DATA_DIR/docker-cache:/root/.cache/pip
+                networks:
+                  - instagram_network
+            
+              nginx:
+                container_name: instagram-nginx
+                image: nginx:alpine
+                restart: unless-stopped
+                ports:
+                  - "80:80"
+                volumes:
+                  - ./nginx.conf:/etc/nginx/conf.d/default.conf
+                  - ./app/static:/app/app/static
+                  - ./app/uploads:/app/app/uploads
+                depends_on:
+                  - app
+                networks:
+                  - instagram_network
+            
+            networks:
+              instagram_network:
+                driver: bridge
             EOF
             
             # Build and start Docker containers
@@ -141,18 +179,19 @@ jobs:
             sleep 20
             
             # Check container status
-            CONTAINER_ID=$($COMPOSE_CMD ps -q app)
-            if [ -n "$CONTAINER_ID" ]; then
-              echo "Container is running with ID: $CONTAINER_ID"
+            docker ps
+            
+            if docker ps | grep -q "instagram-app" && docker ps | grep -q "instagram-nginx"; then
+              echo "Containers are running successfully."
               
               # Check for any circular import issues and fix them
               echo "Running post-deployment fixes..."
-              docker exec $CONTAINER_ID bash -c 'if [ -f /app/fix_auth.sh ]; then chmod +x /app/fix_auth.sh && /app/fix_auth.sh; fi'
-              docker exec $CONTAINER_ID bash -c 'if [ -f /app/emergency_fix.py ]; then python /app/emergency_fix.py; fi'
+              docker exec instagram-app bash -c 'if [ -f /app/fix_auth.sh ]; then chmod +x /app/fix_auth.sh && /app/fix_auth.sh; fi'
+              docker exec instagram-app bash -c 'if [ -f /app/emergency_fix.py ]; then python /app/emergency_fix.py; fi'
               
               echo "Deployment successful!"
             else
-              echo "ERROR: Container failed to start!"
+              echo "ERROR: Containers failed to start!"
               $COMPOSE_CMD logs
               exit 1
             fi
