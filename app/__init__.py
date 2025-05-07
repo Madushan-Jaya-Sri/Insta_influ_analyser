@@ -103,7 +103,7 @@ def create_app():
     # Add template context processors
     @app.context_processor
     def inject_now():
-        return {'now': datetime.now}
+        return {'now': datetime.utcnow}
     
     # Add custom Jinja filters
     @app.template_filter('min')
