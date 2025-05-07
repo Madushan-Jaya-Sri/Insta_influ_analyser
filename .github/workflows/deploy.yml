@@ -88,6 +88,43 @@ jobs:
             echo "Pre-pulling base Python image to speed up build..."
             docker pull python:3.10-slim
             
+            # Create a modified Dockerfile that explicitly binds to 0.0.0.0
+            echo "Creating modified Dockerfile..."
+            cp Dockerfile Dockerfile.original
+            cat > Dockerfile << EOF
+            FROM python:3.10-slim
+
+            # Install Nginx and required packages
+            RUN apt-get update && apt-get install -y nginx curl unzip gcc build-essential python3-dev \\
+                && rm -rf /var/lib/apt/lists/*
+
+            # Set working directory
+            WORKDIR /app
+
+            # Create necessary directories with proper permissions
+            RUN mkdir -p /app/app/static /app/app/uploads /app/app/data
+            RUN chmod -R 777 /app/app/static /app/app/uploads /app/app/data
+
+            # Copy requirements first and install dependencies
+            COPY requirements.txt /app/
+            RUN pip install --upgrade pip && \\
+                pip install --no-cache-dir gunicorn Flask==2.0.1 Flask-Login==0.5.0 Flask-SQLAlchemy==2.5.1 Werkzeug==2.0.3 && \\
+                pip install --no-cache-dir --prefer-binary -r requirements.txt
+
+            # Copy application code
+            COPY . .
+
+            # Make scripts executable
+            RUN if [ -f /app/fix_auth.sh ]; then chmod +x /app/fix_auth.sh; fi
+            RUN if [ -f /app/emergency_fix.py ]; then chmod +x /app/emergency_fix.py; fi
+
+            # Expose port
+            EXPOSE 8001
+
+            # Command to run the application - hardcoded to bind to 0.0.0.0
+            CMD ["gunicorn", "--bind", "0.0.0.0:8001", "--timeout", "120", "--workers", "3", "wsgi:application"]
+            EOF
+            
             # Update docker-compose.yml to ensure only two containers
             cat > docker-compose.yml << EOF
             version: '3.8'
@@ -138,6 +175,35 @@ jobs:
                 driver: bridge
             EOF
             
+            # Update nginx.conf to fix connection issues
+            cat > nginx.conf << EOF
+            server {
+                listen 80;
+                server_name localhost;
+                
+                # Serve static files directly
+                location /static/ {
+                    alias /app/app/static/;
+                    expires 30d;
+                    try_files \$uri =404;
+                }
+                
+                location /uploads/ {
+                    alias /app/app/uploads/;
+                    expires 30d;
+                }
+                
+                # Everything else to Flask app - use service name instead of 127.0.0.1
+                location / {
+                    proxy_pass http://app:8001;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+            }
+            EOF
+            
             # Build and start Docker containers
             echo "Building and starting Docker containers..."
             cd "$WORK_DIR"
@@ -176,10 +242,12 @@ jobs:
             
             # Give the container time to start
             echo "Waiting for containers to start..."
-            sleep 20
+            sleep 30
             
             # Check container status
             docker ps
+            docker logs instagram-app
+            docker logs instagram-nginx
             
             if docker ps | grep -q "instagram-app" && docker ps | grep -q "instagram-nginx"; then
               echo "Containers are running successfully."
