@@ -22,6 +22,9 @@ from app.models.apify_client_wrapper import ApifyWrapper
 from app.models.history import History
 from app import db
 
+# Create the blueprint
+main_bp = Blueprint('main', __name__)
+
 # Define APP_ROOT for use throughout this file
 APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

@@ -139,7 +139,7 @@ def create_app():
     # Register blueprints - move the imports inside the function to avoid circular imports
     def register_blueprints(app):
         # Import blueprints
-        from app.routes.minimal_main import main_bp
+        from app.routes.main import main_bp
         from app.routes.auth import auth_bp
         
         # Register blueprints
