@@ -72,6 +72,10 @@ find /app/static -type f | sort
 echo "Checking Font Awesome files:"
 ls -la /app/app/static/font-awesome/4.3.0/css/ || echo "Font Awesome directory not found"
 
+# Run the fix script to ensure auth.py is correct
+echo "Running auth.py fix script..."
+/fix_auth.sh
+
 echo "Starting Nginx..."
 nginx -t && nginx
 
