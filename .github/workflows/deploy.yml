@@ -272,7 +272,174 @@ jobs:
               docker exec instagram-app bash -c 'if [ -f /app/fix_auth.sh ]; then chmod +x /app/fix_auth.sh && /app/fix_auth.sh; fi'
               docker exec instagram-app bash -c 'if [ -f /app/emergency_fix.py ]; then python /app/emergency_fix.py; fi'
               
-              echo "Deployment successful!"
+              # Fix database permissions and run migrations
+              echo "Setting up database and permissions..."
+              docker exec instagram-app bash -c 'touch /app/app.db && chmod 666 /app/app.db'
+              docker exec instagram-app bash -c 'mkdir -p /app/app/data && chmod -R 777 /app/app/data'
+              docker exec instagram-app bash -c 'mkdir -p /app/migrations && chmod -R 777 /app/migrations'
+              
+              # Fix auth.py to properly handle database errors
+              echo "Creating database error fix..."
+              docker exec instagram-app bash -c "cat > /app/fix_register.py << 'EOF'
+import os
+import re
+
+# Fix routes/auth.py to handle database errors better
+auth_path = '/app/app/routes/auth.py'
+if os.path.exists(auth_path):
+    with open(auth_path, 'r') as f:
+        content = f.read()
+    
+    # Find the register route
+    register_pattern = r'@auth_bp\.route\(\s*[\'\\\"]\/register[\'\\\"]\s*,\s*methods=\[.*\]\s*\)\s*def\s+register\(\):'
+    register_match = re.search(register_pattern, content)
+    
+    if register_match:
+        # Get the position of the register function
+        pos = register_match.start()
+        
+        # Check if content already contains error handling fixes
+        if 'except Exception as e:' not in content[pos:pos+3000]:
+            # Add try-except around the db operations
+            insert_pos = content.find('db.session.add(user)', pos)
+            if insert_pos > -1:
+                modified_content = content[:insert_pos] + 'try:\n        ' + content[insert_pos:]
+                
+                # Find where to add the except block
+                commit_pos = modified_content.find('db.session.commit()', insert_pos)
+                if commit_pos > -1:
+                    end_pos = modified_content.find('\n', commit_pos + 19)
+                    modified_content = modified_content[:end_pos+1] + '    except Exception as e:\n        db.session.rollback()\n        app.logger.error(f\"Registration error: {str(e)}\")\n        return jsonify({\"error\": \"Database error during registration. Please try again.\"}), 500\n' + modified_content[end_pos+1:]
+                    
+                    with open(auth_path, 'w') as f:
+                        f.write(modified_content)
+                    print(f'Added error handling to register route in {auth_path}')
+                else:
+                    print('Could not find db.session.commit() in register route')
+            else:
+                print('Could not find db.session.add(user) in register route')
+        else:
+            print('Error handling already exists in register route')
+    else:
+        print('Could not find register route in auth.py')
+else:
+    print(f'File not found: {auth_path}')
+
+# Fix models/user.py to ensure unique constraint on email
+user_path = '/app/app/models/user.py'
+if os.path.exists(user_path):
+    with open(user_path, 'r') as f:
+        content = f.read()
+    
+    # Check if unique constraint exists on email
+    if 'email = db.Column(db.String' in content and 'unique=True' not in content:
+        # Add unique constraint to email field
+        email_line_pattern = r'email\s*=\s*db\.Column\(db\.String\(.*\)'
+        modified_content = re.sub(email_line_pattern, lambda m: m.group(0)[:-1] + ', unique=True)', content)
+        
+        with open(user_path, 'w') as f:
+            f.write(modified_content)
+        print(f'Added unique constraint to email field in {user_path}')
+    else:
+        print('Email field already has unique constraint or could not be found')
+EOF"
+              
+              # Run the fix script
+              docker exec instagram-app bash -c 'python /app/fix_register.py'
+              
+              # Restart the app container after fixes
+              docker restart instagram-app
+              sleep 10
+              
+              # Enable application logging
+              echo "Setting up enhanced logging..."
+              docker exec instagram-app bash -c "cat > /app/error_logging.py << 'EOF'
+import logging
+import os
+import sys
+
+def setup_logging():
+    # Create logs directory if it doesn't exist
+    os.makedirs('/app/logs', exist_ok=True)
+    
+    # Set up file handler for error logging
+    file_handler = logging.FileHandler('/app/logs/app.log')
+    file_handler.setLevel(logging.ERROR)
+    
+    # Set up console handler for all logs
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    
+    # Set the format for logs
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # Get the root logger and add handlers
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
+    return root_logger
+
+# Call setup_logging if this script is run directly
+if __name__ == '__main__':
+    logger = setup_logging()
+    logger.info('Logging configured successfully')
+EOF"
+              
+              # Inject the logging setup into the app initialization
+              docker exec instagram-app bash -c "cat > /app/app_init_fix.py << 'EOF'
+import os
+import re
+
+# Inject logging setup into app/__init__.py
+init_path = '/app/app/__init__.py'
+if os.path.exists(init_path):
+    with open(init_path, 'r') as f:
+        content = f.read()
+    
+    # Check if logging import already exists
+    if 'import logging' not in content:
+        # Add import at the top
+        modified_content = 'import logging\nimport sys\n' + content
+        
+        # Find create_app function
+        create_app_pattern = r'def\s+create_app\(\s*.*\s*\):'
+        create_app_match = re.search(create_app_pattern, modified_content)
+        
+        if create_app_match:
+            # Get position after function definition
+            pos = create_app_match.end()
+            
+            # Find the first line after function definition
+            next_line_pos = modified_content.find('\n', pos) + 1
+            
+            # Add logging setup
+            logging_setup = '\n    # Set up logging\n    logging.basicConfig(\n        level=logging.INFO,\n        format=\"%(asctime)s - %(name)s - %(levelname)s - %(message)s\",\n        handlers=[\n            logging.StreamHandler(sys.stdout),\n            logging.FileHandler(\"/app/logs/app.log\")\n        ]\n    )\n    app.logger.setLevel(logging.INFO)\n    app.logger.info(\"Application starting\")\n'
+            
+            modified_content = modified_content[:next_line_pos] + logging_setup + modified_content[next_line_pos:]
+            
+            with open(init_path, 'w') as f:
+                f.write(modified_content)
+            print(f'Added logging setup to {init_path}')
+        else:
+            print('Could not find create_app function')
+    else:
+        print('Logging import already exists')
+else:
+    print(f'File not found: {init_path}')
+EOF"
+              
+              # Run the logging setup script
+              docker exec instagram-app bash -c 'python /app/app_init_fix.py'
+              
+              # Restart the app after all fixes
+              docker restart instagram-app
+              
+              echo "Deployment successful with additional error handling and logging!"
+              echo "To check application logs for errors, run: docker exec instagram-app cat /app/logs/app.log"
             else
               echo "ERROR: Containers failed to start!"
               $COMPOSE_CMD logs
