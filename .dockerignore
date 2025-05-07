@@ -3,6 +3,11 @@
 .gitignore
 .github
 
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
 # Python
 __pycache__/
 *.py[cod]
@@ -10,8 +15,6 @@ __pycache__/
 *.so
 .Python
 env/
-venv/
-ENV/
 build/
 develop-eggs/
 dist/
@@ -26,10 +29,53 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
+venv/
+.venv/
+virtualenv/
 
-# Docker
-Dockerfile
-.dockerignore
+# Development and testing
+.env
+.env.local
+.env.development
+.env.test
+coverage/
+.coverage
+htmlcov/
+logs/
+*.log
+.tox/
+.nox/
+.hypothesis/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# OS specific
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*~
+
+# Flask
+instance/
+.webassets-cache
+
+# IDE specific files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+nbproject/
 
 # Development
 .vscode/
@@ -41,10 +87,6 @@ Dockerfile
 app/data/
 app/uploads/
 app/static/images/
-
-# Logs
-logs/
-*.log
 
 # Deployment scripts
 scripts/

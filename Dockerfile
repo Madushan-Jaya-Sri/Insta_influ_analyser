@@ -49,8 +49,24 @@ RUN pip install --upgrade pip && \
     # Now directly install wordcloud with build tools already installed
     pip install --no-cache-dir wordcloud==1.8.1
 
+# Create database.py file first - this ensures proper imports
+RUN mkdir -p /app/app && \
+    echo '"""Database initialization module to prevent circular imports."""\n\nfrom flask_sqlalchemy import SQLAlchemy\nfrom flask_migrate import Migrate\n\n# Initialize extensions without app context\ndb = SQLAlchemy()\nmigrate = Migrate()\n\ndef init_db(app):\n    """Initialize database with Flask app."""\n    db.init_app(app)\n    migrate.init_app(app, db)\n    \n    # Create all tables\n    with app.app_context():\n        db.create_all()\n' > /app/app/database.py
+
 # Copy application code
 COPY . .
+
+# Fix the auth.py file to use the centralized database
+RUN if [ -f /app/app/routes/auth.py ]; then \
+    # Make a backup
+    cp /app/app/routes/auth.py /app/app/routes/auth.py.bak && \
+    # Replace the problematic import line
+    sed -i 's/from run import db/from app.database import db/g' /app/app/routes/auth.py && \
+    echo "Fixed circular import in auth.py"; \
+fi
+
+# Update wsgi.py
+RUN echo '"""WSGI entry point for the application."""\nimport os\nfrom dotenv import load_dotenv\n\n# Load environment variables\nload_dotenv()\n\n# Import application factory\nfrom app import create_app\n\n# Create app instance\napp = create_app()\n\n# This is the object imported by Gunicorn\napplication = app\n\nif __name__ == "__main__":\n    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8001)))\n' > /app/wsgi.py
 
 # Make scripts executable
 COPY start.sh /start.sh

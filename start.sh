@@ -1,92 +1,12 @@
 #!/bin/bash
 set -e
 
-# CRITICAL FIX: Replace auth.py with corrected version at the very start
-echo "CRITICAL: Direct replacement of auth.py to fix circular import..."
-cat > /app/app/routes/auth.py << 'EOF'
-from flask import (
-    Blueprint, render_template, redirect, url_for, request,
-    flash, session, current_app
-)
-from flask_login import login_user, logout_user, login_required, current_user
-
-try:
-    from werkzeug.urls import url_parse
-except ImportError:
-    from werkzeug.urls import url_decode as _url_decode
-    from werkzeug.urls import url_split
-    
-    def url_parse(url):
-        return url_split(url)
-
-from app.forms import LoginForm, RegistrationForm
-from app.models.user import User
-from app.models.history import History
-# Import db from app package directly
-from app import db
-
-# Create the blueprint
-auth_bp = Blueprint('auth', __name__)
-
-@auth_bp.route('/login', methods=['GET', 'POST'])
-def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('main.index'))
-    
-    form = LoginForm()
-    if form.validate_on_submit():
-        user = db.session.scalar(db.select(User).where(User.username == form.username.data))
-
-        if user is None or not user.check_password(form.password.data):
-            flash('Invalid username or password', 'danger')
-            return redirect(url_for('auth.login'))
-
-        login_user(user, remember=form.remember_me.data)
-        flash(f'Welcome back, {user.username}!', 'success')
-
-        next_page = request.args.get('next')
-        if not next_page or url_parse(next_page).netloc != '':
-            next_page = url_for('main.index')
-        return redirect(next_page)
-    
-    return render_template('auth/login.html', title='Sign In', form=form)
-
-@auth_bp.route('/register', methods=['GET', 'POST'])
-def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('main.index'))
-    
-    form = RegistrationForm()
-    if form.validate_on_submit():
-        try:
-            user = User(username=form.username.data, email=form.email.data)
-            user.set_password(form.password.data)
-            db.session.add(user)
-            db.session.commit()
-            flash(f'Congratulations, {user.username}, you are now a registered user!', 'success')
-            login_user(user)
-            return redirect(url_for('main.index'))
-        except Exception as e:
-            db.session.rollback()
-            flash('An error occurred during registration. Please try again.', 'danger')
-            current_app.logger.error(f"Registration error: {str(e)}")
-    
-    return render_template('auth/register.html', title='Register', form=form)
-
-@auth_bp.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    flash('You have been logged out.', 'info')
-    return redirect(url_for('main.index'))
-EOF
-
-# Verify the fix
-echo "Verification: Checking if auth.py has 'from run import db'..."
+# IMPORTANT: Fix any circular imports at runtime
+echo "Checking for circular imports in auth.py..."
 if grep -q "from run import db" /app/app/routes/auth.py; then
-    echo "ERROR: auth.py still contains 'from run import db' after fix attempt!"
-else
-    echo "SUCCESS: auth.py correctly uses 'from app import db'"
+    echo "CRITICAL: Found circular import in auth.py, fixing now..."
+    sed -i 's/from run import db/from app.database import db/g' /app/app/routes/auth.py
+    echo "Fixed circular import in auth.py"
 fi
 
 # Set up necessary directories
@@ -145,6 +65,11 @@ echo "Creating favicon..."
 cp -f /app/app/static/images/brand/momentro-logo.png /app/app/static/favicon.ico
 chmod 644 /app/app/static/favicon.ico
 
+# Clean Python cache to ensure clean imports
+echo "Cleaning Python cache files..."
+find /app -name "*.pyc" -delete
+find /app -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+
 # Debug static files (check directory structure)
 echo "Static files directory structure:"
 find /app/app/static -type d | sort
@@ -154,10 +79,6 @@ find /app/static -type d | sort
 echo "Created static files:"
 find /app/app/static -type f | sort
 find /app/static -type f | sort
-
-# Debug Font Awesome files
-echo "Checking Font Awesome files:"
-ls -la /app/app/static/font-awesome/4.3.0/css/ || echo "Font Awesome directory not found"
 
 echo "Starting Nginx..."
 nginx -t && nginx
@@ -170,7 +91,6 @@ exec gunicorn --bind 127.0.0.1:8000 \
     --log-level debug \
     --access-logfile - \
     --error-logfile - \
-    --reload \
     "wsgi:application"
 
 # Keep the container running if gunicorn fails
