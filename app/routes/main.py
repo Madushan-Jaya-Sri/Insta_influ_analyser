@@ -22,6 +22,9 @@ from app.models.apify_client_wrapper import ApifyWrapper
 from app.models.history import History
 from app import db
 
+# Define APP_ROOT for use throughout this file
+APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # Import blueprint from minimal_main to avoid circular imports
 from app.routes.minimal_main import main_bp
 
@@ -170,7 +173,7 @@ def update_progress(step, progress, status=None, message=None, complete=False):
             'status': status or {},
             'message': message or 'Processing...',
             'complete': complete,
-            'timestamp': datetime.datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat()
         }
             
         # Update progress data for this user in global dictionary
@@ -766,7 +769,7 @@ def process_urls_in_background(instagram_urls, max_posts, time_filter):
     try:
         # Deployment debugging logs
         print("\n==== DEPLOYMENT DEBUG INFO ====")
-        print(f"Starting background processing at: {datetime.datetime.now().isoformat()}")
+        print(f"Starting background processing at: {datetime.now().isoformat()}")
         print(f"Current working directory: {os.getcwd()}")
         print(f"App root: {APP_ROOT}")
         print(f"User ID: {current_user.id if current_user.is_authenticated else 'Not authenticated'}")
@@ -1069,7 +1072,7 @@ def debug_logs():
     
     # Return debugging information
     debug_info = {
-        'current_time': datetime.datetime.now().isoformat(),
+        'current_time': datetime.now().isoformat(),
         'progress_data': progress_data_by_user.get(user_id, {}),
         'is_analysis_complete': analysis_complete_by_user.get(user_id, False),
         'background_data': background_data_by_user.get(user_id, {}),

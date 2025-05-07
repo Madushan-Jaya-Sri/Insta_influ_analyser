@@ -1,11 +1,11 @@
-import datetime
+from datetime import datetime
 from app import db # Import db from app instead of run.py
 from sqlalchemy.dialects.sqlite import JSON # Or postgresql.JSON if using PostgreSQL
 
 class History(db.Model):
     __tablename__ = 'history'
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, index=True, default=datetime.datetime.utcnow)
+    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) # Foreign key to User model
     profile_username = db.Column(db.String(150), nullable=False)
     # Profile details

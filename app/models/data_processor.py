@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import json
 import os
-import datetime
+from datetime import datetime
 import traceback
 from wordcloud import WordCloud
 import matplotlib
@@ -164,7 +164,7 @@ class DataProcessor:
         try:
             # Create a run ID and timestamp
             run_id = str(uuid.uuid4())
-            timestamp = datetime.datetime.now().isoformat()
+            timestamp = datetime.now().isoformat()
             
             # Extract summary information for the run
             influencer_count = len(self.influencers_data)
@@ -237,7 +237,7 @@ class DataProcessor:
                 
             # Convert ISO timestamps to formatted dates
             for run in runs_index:
-                timestamp = datetime.datetime.fromisoformat(run['timestamp'])
+                timestamp = datetime.fromisoformat(run['timestamp'])
                 run['formatted_date'] = timestamp.strftime('%B %d, %Y %I:%M %p')
                 
             return runs_index
@@ -271,7 +271,7 @@ class DataProcessor:
 
     def _json_serializer(self, obj):
         """Custom JSON serializer for objects not serializable by default json code"""
-        if isinstance(obj, (datetime.date, datetime.datetime)):
+        if isinstance(obj, (datetime.date, datetime)):
             return obj.isoformat()
         # Handle numpy types if they appear
         if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
@@ -575,7 +575,7 @@ class DataProcessor:
                             'profile_pic_url': profile.get('profilePicUrl', ''),
                             'business_category': profile.get('categoryName', ''),
                             'country': self.countries.get(username, 'Unknown'),
-                            'processed_at': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'processed_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             'posts': []  # Will be populated with post data
                         }
                     else:
@@ -593,7 +593,7 @@ class DataProcessor:
                             'profile_pic_url': profile.get('profilePicUrl', existing.get('profile_pic_url', '')),
                             'business_category': profile.get('categoryName', existing.get('business_category', '')),
                             'country': self.countries.get(username, existing.get('country', 'Unknown')),
-                            'processed_at': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'processed_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         })
                         
                         # Keep track of previous posts if any
@@ -1288,7 +1288,7 @@ class DataProcessor:
     def save_to_history_db(self, time_filter=None, max_posts=None):
         """Save the analysis results to the database for history tracking"""
         from app.models.history import History, AnalysisImage
-        from run import db
+        from app import db  # Import db from app instead of run.py
 
         if not self.user_id or not self.influencers_data:
             print("Cannot save to history: missing user_id or influencers_data")

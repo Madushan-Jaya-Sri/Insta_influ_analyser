@@ -2,7 +2,7 @@
 # It's intentionally left minimal to avoid circular imports
 
 import os
-import datetime
+from datetime import datetime, timedelta
 import logging
 from logging.handlers import RotatingFileHandler
 import traceback
@@ -37,7 +37,7 @@ def create_app():
     app.config['SESSION_TYPE'] = 'filesystem'
     app.config['SESSION_FILE_DIR'] = os.path.join(base_dir, 'app', 'data', 'sessions')
     app.config['SESSION_PERMANENT'] = True
-    app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=7)
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
     app.config['SESSION_USE_SIGNER'] = True
     app.config['SESSION_COOKIE_SECURE'] = os.getenv('FLASK_ENV') == 'production'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -101,7 +101,7 @@ def create_app():
     # Add template context processors
     @app.context_processor
     def inject_now():
-        return {'now': datetime.datetime.now}
+        return {'now': datetime.now}
     
     # Add custom Jinja filters
     @app.template_filter('min')
