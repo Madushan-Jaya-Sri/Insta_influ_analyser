@@ -8,10 +8,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # Updated deployment to use nginx.conf from repository
       - name: Checkout code
         uses: actions/checkout@v3
-
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      
       - name: Deploy to EC2
         uses: appleboy/ssh-action@master
         with:
@@ -29,6 +31,7 @@ jobs:
             mkdir -p "$DATA_DIR/static/images/brand"
             mkdir -p "$DATA_DIR/uploads"
             mkdir -p "$DATA_DIR/data"
+            mkdir -p "$DATA_DIR/logs"
             
             # Force proper permissions on data directory
             sudo chown -R $(whoami):$(whoami) "$DATA_DIR"
@@ -51,7 +54,64 @@ jobs:
             echo "Repository successfully cloned."
             git log -1 --oneline
             
-            # Create the centralized database module
-            echo "Creating centralized database module..."
-            mkdir -p app
-            cat > app/database.py << 'EOF'
+            # Create .env file if it doesn't exist
+            if [ ! -f .env ]; then
+              echo "Creating .env file..."
+              cat > .env << EOF
+            FLASK_APP=app
+            FLASK_ENV=production
+            FLASK_DEBUG=0
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            DATABASE_URL=sqlite:///app.db
+            LOG_LEVEL=INFO
+            PYTHONUNBUFFERED=1
+            APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            EOF
+            fi
+            
+            # Create symbolic links for persistent data
+            echo "Setting up persistent data links..."
+            ln -sf "$DATA_DIR/static" "$WORK_DIR/app/static"
+            ln -sf "$DATA_DIR/uploads" "$WORK_DIR/app/uploads"
+            ln -sf "$DATA_DIR/data" "$WORK_DIR/app/data"
+            ln -sf "$DATA_DIR/logs" "$WORK_DIR/logs"
+            
+            # Build and start Docker containers
+            echo "Building and starting Docker containers..."
+            cd "$WORK_DIR"
+            
+            # Check for Docker Compose
+            if command -v docker-compose &> /dev/null; then
+              COMPOSE_CMD="docker-compose"
+            else
+              COMPOSE_CMD="docker compose"
+            fi
+            
+            # Stop any existing containers
+            $COMPOSE_CMD down || true
+            
+            # Build and start the new containers
+            $COMPOSE_CMD build --no-cache
+            $COMPOSE_CMD up -d
+            
+            # Give the container time to start
+            echo "Waiting for containers to start..."
+            sleep 10
+            
+            # Check container status
+            CONTAINER_ID=$($COMPOSE_CMD ps -q app)
+            if [ -n "$CONTAINER_ID" ]; then
+              echo "Container is running with ID: $CONTAINER_ID"
+              
+              # Check for any circular import issues and fix them
+              echo "Running post-deployment fixes..."
+              docker exec $CONTAINER_ID bash -c 'if [ -f /app/fix_auth.sh ]; then chmod +x /app/fix_auth.sh && /app/fix_auth.sh; fi'
+              docker exec $CONTAINER_ID bash -c 'if [ -f /app/emergency_fix.py ]; then python /app/emergency_fix.py; fi'
+              
+              echo "Deployment successful!"
+            else
+              echo "ERROR: Container failed to start!"
+              $COMPOSE_CMD logs
+              exit 1
+            fi
