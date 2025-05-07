@@ -73,22 +73,33 @@ def fix_database():
             existing_tables = inspector.get_table_names()
             logger.info(f"Existing tables: {existing_tables}")
             
-            if 'user' not in existing_tables:
-                logger.info("Creating all database tables...")
-                db.create_all()
-                logger.info("Tables created successfully")
-                
-                # Verify tables were created
-                inspector = db.inspect(db.engine)
-                tables = inspector.get_table_names()
-                logger.info(f"Tables after create_all: {tables}")
-                
-                if 'user' in tables:
-                    logger.info("SUCCESS: User table was created")
+            try:
+                if 'user' not in existing_tables:
+                    logger.info("Creating all database tables...")
+                    db.create_all()
+                    logger.info("Tables created successfully")
+                    
+                    # Verify tables were created
+                    inspector = db.inspect(db.engine)
+                    tables = inspector.get_table_names()
+                    logger.info(f"Tables after create_all: {tables}")
+                    
+                    if 'user' in tables:
+                        logger.info("SUCCESS: User table was created")
+                    else:
+                        logger.error("FAILED: User table was not created")
                 else:
-                    logger.error("FAILED: User table was not created")
-            else:
-                logger.info("User table already exists, no action needed")
+                    logger.info("User table already exists, no action needed")
+            except Exception as e:
+                if "table user already exists" in str(e):
+                    logger.info("Table already exists error caught, this is normal and can be ignored")
+                    # Even if we get this error, we should still have the table
+                    logger.info("SUCCESS: User table exists")
+                else:
+                    logger.error(f"Error creating tables: {str(e)}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    return False
                 
             return True
     except Exception as e:

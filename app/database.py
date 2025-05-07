@@ -57,19 +57,25 @@ def init_db(app):
             tables = inspector.get_table_names()
             app.logger.info(f"Tables before create_all: {tables}")
             
+            # Only create tables if they don't exist
             if 'user' not in tables:
                 app.logger.info("Creating database tables...")
                 db.create_all()
                 app.logger.info("Database tables created successfully")
                 
-            # Verify tables were created
-            tables = inspector.get_table_names()
-            app.logger.info(f"Tables after create_all: {tables}")
-            
-            if 'user' not in tables:
-                app.logger.error("Failed to create 'user' table!")
+                # Verify tables were created
+                tables = inspector.get_table_names()
+                app.logger.info(f"Tables after create_all: {tables}")
                 
+                if 'user' not in tables:
+                    app.logger.error("Failed to create 'user' table!")
+            else:
+                app.logger.info("Tables already exist, skipping creation")
+            
         except Exception as e:
-            app.logger.error(f"Error initializing database: {str(e)}")
-            import traceback
-            app.logger.error(traceback.format_exc()) 
+            if "table user already exists" in str(e):
+                app.logger.info("Table 'user' already exists, continuing normally")
+            else:
+                app.logger.error(f"Error initializing database: {str(e)}")
+                import traceback
+                app.logger.error(traceback.format_exc()) 
