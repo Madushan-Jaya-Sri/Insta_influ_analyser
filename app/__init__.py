@@ -138,8 +138,8 @@ def create_app():
         from app.routes.minimal_main import main_bp
         app.register_blueprint(main_bp)
     
-        # Import from minimal_auth to avoid circular imports
-        from app.routes.minimal_auth import auth_bp
+        # Import auth_bp directly from auth.py
+        from app.routes.auth import auth_bp
         app.register_blueprint(auth_bp, url_prefix='/auth')
     
     # Call the blueprint registration function

@@ -21,8 +21,8 @@ from app.models.user import User
 from app.models.history import History # Import History if needed here, or likely in main.py
 from app import db # Import db instance from app instead of run.py
 
-# Import blueprint from minimal_auth to avoid circular imports
-from app.routes.minimal_auth import auth_bp
+# Create the blueprint directly here
+auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
