@@ -18,8 +18,9 @@ except ImportError:
 # Updated imports for models and forms
 from app.forms import LoginForm, RegistrationForm
 from app.models.user import User
-from app.models.history import History # Import History if needed here, or likely in main.py
-from app import db # Import db instance from app instead of run.py
+from app.models.history import History
+# Import db from app package directly
+from app import db
 
 # Create the blueprint directly here
 auth_bp = Blueprint('auth', __name__)
@@ -28,7 +29,6 @@ auth_bp = Blueprint('auth', __name__)
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('main.index')) # Redirect to main index or dashboard
-    
     
     form = LoginForm()
     if form.validate_on_submit():
