@@ -38,6 +38,7 @@ jobs:
             sudo mkdir -p "$DATA_DIR/uploads"
             sudo mkdir -p "$DATA_DIR/data"
             sudo mkdir -p "$DATA_DIR/logs"
+            sudo mkdir -p "$DATA_DIR/db"
             sudo chown -R $(whoami):$(whoami) "$DATA_DIR"
             sudo chmod -R 777 "$DATA_DIR"
 
@@ -67,6 +68,7 @@ jobs:
             echo '      - ${HOME}/insta_analyzer_data/uploads:/app/app/uploads' >> docker-compose.yml
             echo '      - ${HOME}/insta_analyzer_data/data:/app/app/data' >> docker-compose.yml
             echo '      - ${HOME}/insta_analyzer_data/logs:/app/logs' >> docker-compose.yml
+            echo '      - ${HOME}/insta_analyzer_data/db:/app/app/db' >> docker-compose.yml
             echo '    environment:' >> docker-compose.yml
             echo '      - FLASK_APP=wsgi:application' >> docker-compose.yml
             echo '      - FLASK_ENV=production' >> docker-compose.yml
@@ -74,6 +76,8 @@ jobs:
             echo '      - SECRET_KEY=${SECRET_KEY}' >> docker-compose.yml
             echo '      - OPENAI_API_KEY=${OPENAI_API_KEY}' >> docker-compose.yml
             echo '      - APIFY_API_TOKEN=${APIFY_API_TOKEN}' >> docker-compose.yml
+            echo '      - SQLALCHEMY_DATABASE_URI=sqlite:////app/app/db/app.db' >> docker-compose.yml
+            echo '      - SQLALCHEMY_TRACK_MODIFICATIONS=False' >> docker-compose.yml
             echo '      - LOG_LEVEL=INFO' >> docker-compose.yml
             echo '      - PYTHONUNBUFFERED=1' >> docker-compose.yml
             echo '    command: /start.sh' >> docker-compose.yml
@@ -83,6 +87,8 @@ jobs:
             echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" > .env
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
             echo "APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> .env
+            echo "SQLALCHEMY_DATABASE_URI=sqlite:////app/app/db/app.db" >> .env
+            echo "SQLALCHEMY_TRACK_MODIFICATIONS=False" >> .env
 
             # Create nginx.conf file
             echo "Creating nginx.conf file..."
@@ -135,10 +141,16 @@ jobs:
             echo '    """Initialize database with Flask app."""' >> app/database.py
             echo '    db.init_app(app)' >> app/database.py
             echo '    migrate.init_app(app, db)' >> app/database.py
-            echo '    ' >> app/database.py
-            echo '    # Create all tables' >> app/database.py
-            echo '    with app.app_context():' >> app/database.py
-            echo '        db.create_all()' >> app/database.py
+
+            # Download Font Awesome assets
+            echo "Downloading Font Awesome assets..."
+            mkdir -p app/static/font-awesome/4.3.0/css
+            mkdir -p app/static/font-awesome/4.3.0/fonts
+            curl -L https://fontawesome.com/v4/assets/font-awesome-4.3.0.zip -o /tmp/font-awesome.zip
+            unzip -q /tmp/font-awesome.zip -d /tmp
+            cp -r /tmp/font-awesome-4.3.0/css/* app/static/font-awesome/4.3.0/css/
+            cp -r /tmp/font-awesome-4.3.0/fonts/* app/static/font-awesome/4.3.0/fonts/
+            rm -rf /tmp/font-awesome*
 
             echo "=========================================================="
             echo "PHASE 2: BUILD AND DEPLOY"
@@ -167,6 +179,12 @@ jobs:
             # Build the Docker image
             echo "Building Docker image..."
             docker-compose build --no-cache
+
+            # Apply database migrations
+            echo "Applying database migrations..."
+            docker-compose run --rm web flask db init || true
+            docker-compose run --rm web flask db migrate
+            docker-compose run --rm web flask db upgrade
 
             # Start the containers
             echo "Starting Docker containers..."
