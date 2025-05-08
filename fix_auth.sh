@@ -7,6 +7,7 @@ if [ ! -d "/app" ]; then
   exit 1
 fi
 
+
 echo "Fixing circular import in auth.py..."
 cat > /app/app/routes/auth.py << 'EOF'
 from flask import (
