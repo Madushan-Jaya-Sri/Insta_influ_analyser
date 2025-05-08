@@ -8,7 +8,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # Updated deployment to use nginx.conf from repository
       - name: Checkout code
         uses: actions/checkout@v3
 
@@ -19,112 +18,184 @@ jobs:
           username: ${{ secrets.AWS_USERNAME }}
           key: ${{ secrets.AWS_SSH_KEY }}
           script: |
-            echo "Starting deployment process..."
+            echo "=========================================================="
+            echo "PHASE 1: BUILD SETUP"
+            echo "=========================================================="
             
             # Set up working directories
-            WORK_DIR="$HOME/fresh_deployment"
-            DATA_DIR="$HOME/app_persistent_data"
+            WORK_DIR="$HOME/insta_analyzer"
+            DATA_DIR="$HOME/insta_analyzer_data"
             
-            # Clean previous deployment directory with sudo
-            echo "Cleaning previous deployment..."
+            # Clean up previous deployment data
+            echo "Cleaning previous deployment data..."
             sudo rm -rf "$WORK_DIR"
             mkdir -p "$WORK_DIR"
-            cd "$WORK_DIR"
             
-            # Clone repository
-            echo "Cloning fresh repository..."
-            git clone https://github.com/madushan-jaya-sri/Insta_influ_analyser.git .
-            
-            if [ ! -d app ]; then
-              echo "ERROR: Repository cloning failed or app directory missing!"
-              exit 1
-            fi
-            
-            echo "Repository successfully cloned."
-            git log -1 --oneline
-            
-            # Create the centralized database module
-            echo "Creating centralized database module..."
-            mkdir -p app
-            echo '"""Database initialization module to prevent circular imports."""' > app/database.py
-            echo '' >> app/database.py
-            echo 'from flask_sqlalchemy import SQLAlchemy' >> app/database.py
-            echo 'from flask_migrate import Migrate' >> app/database.py
-            echo '' >> app/database.py
-            echo '# Initialize extensions without app context' >> app/database.py
-            echo 'db = SQLAlchemy()' >> app/database.py
-            echo 'migrate = Migrate()' >> app/database.py
-            echo '' >> app/database.py
-            echo 'def init_db(app):' >> app/database.py
-            echo '    """Initialize database with Flask app."""' >> app/database.py
-            echo '    db.init_app(app)' >> app/database.py
-            echo '    migrate.init_app(app, db)' >> app/database.py
-            echo '    ' >> app/database.py
-            echo '    # Create all tables' >> app/database.py
-            echo '    with app.app_context():' >> app/database.py
-            echo '        db.create_all()' >> app/database.py
-            
-            # Fix auth.py file if it exists
-            if [ -f app/routes/auth.py ]; then
-              echo "Fixing circular imports in auth.py..."
-              cp app/routes/auth.py app/routes/auth.py.bak
-              sed -i 's/from run import db/from app.database import db/g' app/routes/auth.py
-            fi
-            
-            # Run emergency fix script
-            if [ -f emergency_fix.py ]; then
-              echo "Running emergency fixes..."
-              python emergency_fix.py
-            fi
-            
-            # Create persistent data directory if it doesn't exist
-            echo "Setting up persistent data directories..."
+            # Ensure data directory exists with proper permissions
             sudo mkdir -p "$DATA_DIR/static/images/brand"
+            sudo mkdir -p "$DATA_DIR/static/images/profiles"
+            sudo mkdir -p "$DATA_DIR/static/images/posts"
             sudo mkdir -p "$DATA_DIR/uploads"
             sudo mkdir -p "$DATA_DIR/data"
-            
-            # Force proper permissions on data directory
+            sudo mkdir -p "$DATA_DIR/logs"
             sudo chown -R $(whoami):$(whoami) "$DATA_DIR"
             sudo chmod -R 777 "$DATA_DIR"
             
-            # Create symbolic links for persistent data
-            echo "Creating symbolic links for persistent data..."
-            sudo rm -rf app/static/images/brand
-            sudo rm -rf app/uploads
-            sudo rm -rf app/data
-            ln -sf "$DATA_DIR/static/images/brand" app/static/images/brand
-            ln -sf "$DATA_DIR/uploads" app/uploads
-            ln -sf "$DATA_DIR/data" app/data
+            # Clone fresh repository
+            cd "$WORK_DIR"
+            echo "Cloning repository..."
+            git clone https://github.com/Madushan-Jaya-Sri/Insta_influ_analyser.git .
+            if [ ! -d app ]; then
+              echo "ERROR: Repository cloning failed!"
+              exit 1
+            fi
             
-            # Ensure proper permissions
-            sudo chown -R $(whoami):$(whoami) .
-            sudo chmod -R 755 app
-            sudo chmod -R 777 app/static/images
-            sudo chmod -R 777 app/uploads
-            sudo chmod -R 777 app/data
-            sudo chmod -R 777 logs
+            # Create the core project files
+            echo "Setting up core project files..."
             
-            # Build and run with Docker Compose
-            echo "Building and running Docker containers..."
-            # Make sure docker-compose is installed
+            # Create docker-compose.yml for production
+            cat > docker-compose.yml << 'EOF'
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ${HOME}/insta_analyzer_data/static:/app/app/static
+      - ${HOME}/insta_analyzer_data/uploads:/app/app/uploads
+      - ${HOME}/insta_analyzer_data/data:/app/app/data
+      - ${HOME}/insta_analyzer_data/logs:/app/logs
+    environment:
+      - FLASK_APP=wsgi:application
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+      - SECRET_KEY=${SECRET_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - APIFY_API_TOKEN=${APIFY_API_TOKEN}
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+    command: /start.sh
+EOF
+            
+            # Create .env file with secrets
+            echo "Creating .env file..."
+            cat > .env << EOF
+SECRET_KEY=${{ secrets.SECRET_KEY }}
+OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}
+EOF
+            
+            # Update nginx.conf to use port 8001
+            cat > nginx.conf << 'EOF'
+server {
+    listen 80;
+    server_name localhost;
+    
+    # Serve static files directly
+    location /static/ {
+        alias /app/app/static/;
+        expires 30d;
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=31536000";
+    }
+    
+    location /uploads/ {
+        alias /app/app/uploads/;
+        expires 30d;
+    }
+    
+    # Everything else to Flask app
+    location / {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 300s;
+        proxy_read_timeout 300s;
+    }
+}
+EOF
+
+            # Update start.sh script to use port 8001
+            sed -i 's/--bind 127.0.0.1:8000/--bind 127.0.0.1:8001/g' start.sh
+            chmod +x start.sh
+            
+            # Create the centralized database module
+            cat > app/database.py << 'EOF'
+"""Database initialization module to prevent circular imports."""
+
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+
+# Initialize extensions without app context
+db = SQLAlchemy()
+migrate = Migrate()
+
+def init_db(app):
+    """Initialize database with Flask app."""
+    db.init_app(app)
+    migrate.init_app(app, db)
+    
+    # Create all tables
+    with app.app_context():
+        db.create_all()
+EOF
+                        
+            # Fix auth.py file if it exists 
+            if [ -f app/routes/auth.py ]; then
+              echo "Fixing circular imports in auth.py..."
+              sed -i 's/from run import db/from app.database import db/g' app/routes/auth.py
+            fi
+            
+            echo "=========================================================="
+            echo "PHASE 2: BUILD AND DEPLOY"
+            echo "=========================================================="
+            
+            # Remove unnecessary files
+            echo "Removing unnecessary files..."
+            rm -f fix_*.sh
+            rm -f emergency_fix.py
+            rm -f fixed_auth.py
+            
+            # Make sure Docker and Docker Compose are installed
+            if ! command -v docker &> /dev/null; then
+              echo "Docker not found, please install Docker first"
+              exit 1
+            fi
+            
             if ! command -v docker-compose &> /dev/null; then
               echo "Installing docker-compose..."
               sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
               sudo chmod +x /usr/local/bin/docker-compose
             fi
             
-            # Stop any running containers
+            # Stop running containers
+            echo "Stopping any running containers..."
             docker-compose down || true
             
-            # Build and start containers
+            # Build the Docker image
+            echo "Building Docker image..."
             docker-compose build --no-cache
+            
+            # Start the containers
+            echo "Starting Docker containers..."
             docker-compose up -d
             
             # Check if containers are running
+            echo "Verifying deployment..."
+            sleep 10
             if docker-compose ps | grep -q "Up"; then
-              echo "Deployment successful! Application is running."
+              echo "✅ Deployment successful! Application is running at http://13.126.220.175/"
             else
-              echo "ERROR: Containers failed to start. Check logs with 'docker-compose logs'"
+              echo "❌ Deployment failed!"
               docker-compose logs
               exit 1
             fi
+            
+            echo "Deployment complete! Your application is now available at http://13.126.220.175/"
