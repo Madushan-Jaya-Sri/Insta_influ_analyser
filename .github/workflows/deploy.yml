@@ -25,17 +25,9 @@ jobs:
             WORK_DIR="$HOME/fresh_deployment"
             DATA_DIR="$HOME/app_persistent_data"
             
-            # Create persistent data directory if it doesn't exist
-            mkdir -p "$DATA_DIR/static/images/brand"
-            mkdir -p "$DATA_DIR/uploads"
-            mkdir -p "$DATA_DIR/data"
-            
-            # Force proper permissions on data directory
-            sudo chown -R $(whoami):$(whoami) "$DATA_DIR"
-            chmod -R 777 "$DATA_DIR"
-            
-            # Clean previous deployment directory
-            rm -rf "$WORK_DIR"
+            # Clean previous deployment directory with sudo
+            echo "Cleaning previous deployment..."
+            sudo rm -rf "$WORK_DIR"
             mkdir -p "$WORK_DIR"
             cd "$WORK_DIR"
             
@@ -85,21 +77,46 @@ jobs:
               python emergency_fix.py
             fi
             
+            # Create persistent data directory if it doesn't exist
+            echo "Setting up persistent data directories..."
+            sudo mkdir -p "$DATA_DIR/static/images/brand"
+            sudo mkdir -p "$DATA_DIR/uploads"
+            sudo mkdir -p "$DATA_DIR/data"
+            
+            # Force proper permissions on data directory
+            sudo chown -R $(whoami):$(whoami) "$DATA_DIR"
+            sudo chmod -R 777 "$DATA_DIR"
+            
             # Create symbolic links for persistent data
             echo "Creating symbolic links for persistent data..."
-            rm -rf app/static/images/brand
-            rm -rf app/uploads
-            rm -rf app/data
+            sudo rm -rf app/static/images/brand
+            sudo rm -rf app/uploads
+            sudo rm -rf app/data
             ln -sf "$DATA_DIR/static/images/brand" app/static/images/brand
             ln -sf "$DATA_DIR/uploads" app/uploads
             ln -sf "$DATA_DIR/data" app/data
             
             # Ensure proper permissions
-            chmod -R 755 app
+            sudo chown -R $(whoami):$(whoami) .
+            sudo chmod -R 755 app
+            sudo chmod -R 777 app/static/images
+            sudo chmod -R 777 app/uploads
+            sudo chmod -R 777 app/data
+            sudo chmod -R 777 logs
             
             # Build and run with Docker Compose
             echo "Building and running Docker containers..."
-            docker-compose down
+            # Make sure docker-compose is installed
+            if ! command -v docker-compose &> /dev/null; then
+              echo "Installing docker-compose..."
+              sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi
+            
+            # Stop any running containers
+            docker-compose down || true
+            
+            # Build and start containers
             docker-compose build --no-cache
             docker-compose up -d
             
@@ -109,4 +126,5 @@ jobs:
             else
               echo "ERROR: Containers failed to start. Check logs with 'docker-compose logs'"
               docker-compose logs
+              exit 1
             fi
