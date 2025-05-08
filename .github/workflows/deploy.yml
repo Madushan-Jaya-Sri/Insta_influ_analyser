@@ -54,98 +54,91 @@ jobs:
             echo "Setting up core project files..."
             
             # Create docker-compose.yml for production
-            cat > docker-compose.yml << 'EOF'
-version: '3.8'
-
-services:
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    volumes:
-      - ${HOME}/insta_analyzer_data/static:/app/app/static
-      - ${HOME}/insta_analyzer_data/uploads:/app/app/uploads
-      - ${HOME}/insta_analyzer_data/data:/app/app/data
-      - ${HOME}/insta_analyzer_data/logs:/app/logs
-    environment:
-      - FLASK_APP=wsgi:application
-      - FLASK_ENV=production
-      - FLASK_DEBUG=0
-      - SECRET_KEY=${SECRET_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - APIFY_API_TOKEN=${APIFY_API_TOKEN}
-      - LOG_LEVEL=INFO
-      - PYTHONUNBUFFERED=1
-    command: /start.sh
-EOF
+            echo 'version: '\''3.8'\''' > docker-compose.yml
+            echo '' >> docker-compose.yml
+            echo 'services:' >> docker-compose.yml
+            echo '  web:' >> docker-compose.yml
+            echo '    build:' >> docker-compose.yml
+            echo '      context: .' >> docker-compose.yml
+            echo '      dockerfile: Dockerfile' >> docker-compose.yml
+            echo '    restart: unless-stopped' >> docker-compose.yml
+            echo '    ports:' >> docker-compose.yml
+            echo '      - "80:80"' >> docker-compose.yml
+            echo '    volumes:' >> docker-compose.yml
+            echo '      - ${HOME}/insta_analyzer_data/static:/app/app/static' >> docker-compose.yml
+            echo '      - ${HOME}/insta_analyzer_data/uploads:/app/app/uploads' >> docker-compose.yml
+            echo '      - ${HOME}/insta_analyzer_data/data:/app/app/data' >> docker-compose.yml
+            echo '      - ${HOME}/insta_analyzer_data/logs:/app/logs' >> docker-compose.yml
+            echo '    environment:' >> docker-compose.yml
+            echo '      - FLASK_APP=wsgi:application' >> docker-compose.yml
+            echo '      - FLASK_ENV=production' >> docker-compose.yml
+            echo '      - FLASK_DEBUG=0' >> docker-compose.yml
+            echo '      - SECRET_KEY=${SECRET_KEY}' >> docker-compose.yml
+            echo '      - OPENAI_API_KEY=${OPENAI_API_KEY}' >> docker-compose.yml
+            echo '      - APIFY_API_TOKEN=${APIFY_API_TOKEN}' >> docker-compose.yml
+            echo '      - LOG_LEVEL=INFO' >> docker-compose.yml
+            echo '      - PYTHONUNBUFFERED=1' >> docker-compose.yml
+            echo '    command: /start.sh' >> docker-compose.yml
             
             # Create .env file with secrets
             echo "Creating .env file..."
-            cat > .env << EOF
-SECRET_KEY=${{ secrets.SECRET_KEY }}
-OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}
-EOF
+            echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" > .env
+            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+            echo "APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}" >> .env
             
-            # Update nginx.conf to use port 8001
-            cat > nginx.conf << 'EOF'
-server {
-    listen 80;
-    server_name localhost;
-    
-    # Serve static files directly
-    location /static/ {
-        alias /app/app/static/;
-        expires 30d;
-        try_files $uri =404;
-        add_header Cache-Control "public, max-age=31536000";
-    }
-    
-    location /uploads/ {
-        alias /app/app/uploads/;
-        expires 30d;
-    }
-    
-    # Everything else to Flask app
-    location / {
-        proxy_pass http://127.0.0.1:8001;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_connect_timeout 300s;
-        proxy_read_timeout 300s;
-    }
-}
-EOF
+            # Create nginx.conf file
+            echo "Creating nginx.conf file..."
+            echo 'server {' > nginx.conf
+            echo '    listen 80;' >> nginx.conf
+            echo '    server_name localhost;' >> nginx.conf
+            echo '' >> nginx.conf
+            echo '    # Serve static files directly' >> nginx.conf
+            echo '    location /static/ {' >> nginx.conf
+            echo '        alias /app/app/static/;' >> nginx.conf
+            echo '        expires 30d;' >> nginx.conf
+            echo '        try_files $uri =404;' >> nginx.conf
+            echo '        add_header Cache-Control "public, max-age=31536000";' >> nginx.conf
+            echo '    }' >> nginx.conf
+            echo '' >> nginx.conf
+            echo '    location /uploads/ {' >> nginx.conf
+            echo '        alias /app/app/uploads/;' >> nginx.conf
+            echo '        expires 30d;' >> nginx.conf
+            echo '    }' >> nginx.conf
+            echo '' >> nginx.conf
+            echo '    # Everything else to Flask app' >> nginx.conf
+            echo '    location / {' >> nginx.conf
+            echo '        proxy_pass http://127.0.0.1:8001;' >> nginx.conf
+            echo '        proxy_set_header Host $host;' >> nginx.conf
+            echo '        proxy_set_header X-Real-IP $remote_addr;' >> nginx.conf
+            echo '        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' >> nginx.conf
+            echo '        proxy_set_header X-Forwarded-Proto $scheme;' >> nginx.conf
+            echo '        proxy_connect_timeout 300s;' >> nginx.conf
+            echo '        proxy_read_timeout 300s;' >> nginx.conf
+            echo '    }' >> nginx.conf
+            echo '}' >> nginx.conf
 
             # Update start.sh script to use port 8001
             sed -i 's/--bind 127.0.0.1:8000/--bind 127.0.0.1:8001/g' start.sh
             chmod +x start.sh
             
             # Create the centralized database module
-            cat > app/database.py << 'EOF'
-"""Database initialization module to prevent circular imports."""
-
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-
-# Initialize extensions without app context
-db = SQLAlchemy()
-migrate = Migrate()
-
-def init_db(app):
-    """Initialize database with Flask app."""
-    db.init_app(app)
-    migrate.init_app(app, db)
-    
-    # Create all tables
-    with app.app_context():
-        db.create_all()
-EOF
+            echo '"""Database initialization module to prevent circular imports."""' > app/database.py
+            echo '' >> app/database.py
+            echo 'from flask_sqlalchemy import SQLAlchemy' >> app/database.py
+            echo 'from flask_migrate import Migrate' >> app/database.py
+            echo '' >> app/database.py
+            echo '# Initialize extensions without app context' >> app/database.py
+            echo 'db = SQLAlchemy()' >> app/database.py
+            echo 'migrate = Migrate()' >> app/database.py
+            echo '' >> app/database.py
+            echo 'def init_db(app):' >> app/database.py
+            echo '    """Initialize database with Flask app."""' >> app/database.py
+            echo '    db.init_app(app)' >> app/database.py
+            echo '    migrate.init_app(app, db)' >> app/database.py
+            echo '    ' >> app/database.py
+            echo '    # Create all tables' >> app/database.py
+            echo '    with app.app_context():' >> app/database.py
+            echo '        db.create_all()' >> app/database.py
                         
             # Fix auth.py file if it exists 
             if [ -f app/routes/auth.py ]; then
